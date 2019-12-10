@@ -1,6 +1,7 @@
 import numpy as np
 
-from DSL.transformations import Alphabet, REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union
+from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union
+from DSL.Alphabet import Alphabet
 
 Alphabet.set_word_model()
 dict_map = {}

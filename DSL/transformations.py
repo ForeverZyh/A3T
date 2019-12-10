@@ -1,90 +1,9 @@
 import re
 import itertools
+import numpy as np
 
-
-def tuple_set_union(ret0: tuple, ret1: tuple):
-    if ret0 is None:
-        return ret1
-    if ret1 is None:
-        return ret0
-    ret = ()
-    max_len = max(len(ret0), len(ret1))
-    for i in range(max_len):
-        if i >= len(ret0):
-            r0 = [""]
-        else:
-            r0 = ret0[i]
-        if i >= len(ret1):
-            r1 = [""]
-        else:
-            r1 = ret1[i]
-        ret += (tuple(set(r0).union(set(r1))),)
-
-    return ret
-
-
-class Alphabet:
-    alphabet = []
-    escaped_char = ""
-    is_char_model = None
-    embedding = None
-
-    @staticmethod
-    def set_alphabet(a: dict, embedding):
-        Alphabet.alphabet = [None] * len(a)
-        for s in a:
-            Alphabet.alphabet[a[s]] = s
-        Alphabet.embedding = embedding
-        assert len(embedding) == len(a)
-
-        Alphabet.escaped_char = ""
-        for i in range(10):
-            Alphabet.escaped_char += r"\$"
-            not_exist = True
-            for s in Alphabet.alphabet:
-                if Alphabet.escaped_char in s:
-                    not_exist = False
-                    break
-            if not_exist:
-                return
-
-        raise AssertionError("cannot find an escaped_char!")
-
-    @staticmethod
-    def get_acc_alphabet(phi):
-        alphabet_acc = []
-        for c in Alphabet.alphabet:
-            if phi(c):
-                alphabet_acc.append(c)
-        return alphabet_acc
-
-    @staticmethod
-    def set_word_model():
-        Alphabet.is_char_model = False
-
-    @staticmethod
-    def set_char_model():
-        Alphabet.is_char_model = True
-
-    @staticmethod
-    def to_interval_space(exact_space):
-        ret = None
-        for s in exact_space:
-            ret = tuple_set_union(ret, tuple([(t,) for t in s]))
-        return ret
-
-    @staticmethod
-    def to_convex_hull(exact_space, orgin_input):
-        ret = Alphabet.to_interval_space(exact_space)
-        Max_modify = 0
-        for s in exact_space:
-            modify = abs(len(s) - len(orgin_input))
-            min_len = min(len(s), len(orgin_input))
-            for i in range(min_len):
-                if s[i] != orgin_input[i]:
-                    modify += 1
-            Max_modify = max(Max_modify, modify)
-        return ret, Max_modify
+from utils import tuple_set_union, Beam
+from DSL.Alphabet import Alphabet
 
 
 class INS:
@@ -103,6 +22,24 @@ class INS:
 
     def interval_space(self, s):
         return {0: (tuple(self.alphabet_acc),)}
+
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        assert b > 0
+        ret = Beam(b)
+        for c in self.alphabet_acc:
+            if Alphabet.is_char_model:  # if character-level model
+                new_output = output + c
+            else:  # if word-level model
+                new_output = output + (c,)
+            end_pos = min(len(new_output) - 1, input_pos - 1)
+            if end_pos == len(new_output) - 1:
+                score = np.sum(
+                    partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+            else:
+                score = 0
+            ret.add(new_output, score)
+
+        return {input_pos: ret.check_balance()}
 
 
 class DEL:
@@ -125,8 +62,18 @@ class DEL:
         else:
             return {}
 
-    # def check_sat(self, single_s):
-    #     return not set(self.alphabet_acc).isdisjoint(set(single_s))
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        assert b > 0
+        if input_pos < len(s) and self.phi(s[input_pos]):
+            end_pos = min(len(output) - 1, input_pos)
+            if end_pos == input_pos:
+                score = np.sum(
+                    partial_loss[end_pos] * (Alphabet.mapping[output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+            else:
+                score = 0
+            return {input_pos + 1: [[output, score]]}
+        else:
+            return {}
 
 
 class REGEX:
@@ -166,18 +113,28 @@ class REGEX:
         self.cache_interval[s] = ret
         return ret
 
-    # def check_sat(self, s):
-    #     # TODO the same as the above one
-    #     if s in self.cache:
-    #
-    #     for s_list in itertools.product(*s):
-    #         if Alphabet.is_char_model:
-    #             if self.regex.fullmatch("".join(s_list)):
-    #                 return True
-    #         else:
-    #             if self.regex.fullmatch(Alphabet.escaped_char.join(s_list)):
-    #                 return True
-    #     return False
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        assert b > 0
+        ret = {}
+        new_output = output
+        score = 0
+        for i in range(input_pos, len(s) + 1):
+            if i > input_pos:
+                if Alphabet.is_char_model:  # if character-level model
+                    new_output += s[i - 1]
+                else:
+                    new_output += (s[i - 1],)
+                end_pos = min(len(new_output) - 1, i - 1)
+                score += np.sum(
+                    partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+            if Alphabet.is_char_model:  # if character-level model
+                if self.regex.fullmatch(s[:i]):
+                    ret[i] = [[new_output, score]]
+            else:  # if word-level model
+                if self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
+                    ret[i] = [[new_output, score]]
+
+        return ret
 
 
 class SWAP:
@@ -204,11 +161,20 @@ class SWAP:
 
         return {} if len(ret[0]) == 0 or len(ret[1]) == 0 else {2: tuple(ret)}
 
-    # def check_sat(self, *single_s):
-    #     for i in range(len(self.phi)):
-    #         if set(single_s[i]).isdisjoint(set(self.alphabet_acc[i])):
-    #             return False
-    #     return True
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        if input_pos + 1 < len(s) and self.phi[0](s[input_pos]) and self.phi[1](s[input_pos + 1]):
+            if Alphabet.is_char_model:  # if character-level model
+                new_output = output + s[input_pos + 1] + s[input_pos]
+            else:
+                new_output = output + (s[input_pos + 1], s[input_pos],)
+            end_pos = min(len(new_output) - 1, input_pos + 1)
+            score = 0
+            for i in range(2):
+                score += np.sum(partial_loss[end_pos - i] * (
+                        Alphabet.mapping[new_output[end_pos - i]] - Alphabet.mapping[s[end_pos - i]]))
+            return {input_pos + 2: [[new_output, score]]}
+        else:
+            return {}
 
 
 class SUB:
@@ -234,8 +200,19 @@ class SUB:
                     ret += (self.fun(single_s),)
         return {} if len(ret) == 0 else {1: (ret,)}
 
-    # def check_sat(self, single_s):
-    #     return not set(single_s).isdisjoint(set(self.alphabet_acc))
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        assert b > 0
+        if input_pos < len(s) and self.phi(s[input_pos]):
+            if Alphabet.is_char_model:  # if character-level model
+                new_output = output + self.fun(s[input_pos])
+            else:
+                new_output = output + (self.fun(s[input_pos]),)
+            end_pos = min(len(new_output) - 1, input_pos)
+            score = np.sum(
+                partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+            return {input_pos + 1: [[new_output, score]]}
+        else:
+            return {}
 
 
 class tUnion:
@@ -263,8 +240,28 @@ class tUnion:
 
         return ret
 
-    # def check_sat(self, s):
-    #     pass
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        '''
+        The beam search for tUnion
+        :param s: the input string s
+        :param output: the current output
+        :param input_pos: the current length of input already taken
+        :param b: the budget b
+        :param partial_with_respect_to_loss: the partial derivative of loss with respect to s
+        :return: a dict, the keys are the length of input consumed, the values are [output, score],
+            output is the produced output of tUnion included previous output, the score is the beam search's score.
+        '''
+        ret = {}
+        for t in self.t:
+            tmp_ret = t.beam_search_adversarial(s, output, input_pos, b, partial_loss)
+            for pos in tmp_ret:
+                if pos not in ret:
+                    ret[pos] = Beam(b)
+                ret[pos].extend(tmp_ret[pos])
+
+        for pos in ret:
+            ret[pos] = ret[pos].check_balance()
+        return ret
 
 
 class Transformation:
@@ -329,35 +326,49 @@ class Transformation:
         self.cache_interval[s] = final_ret
         return final_ret
 
-    # def check_sat(self, pos_seq, s):
-    #     if (pos_seq, s) in self.cache_check_sat:
-    #         return self.cache_check_sat[(pos_seq, s)]
-    #     if pos_seq == len(self.seq):
-    #         epsilon_exists = True
-    #         for ss in s:
-    #             if "" not in ss:
-    #                 epsilon_exists = False
-    #                 break
-    #         self.cache_check_sat[(pos_seq, s)] = epsilon_exists
-    #         return epsilon_exists
-    #     else:
-    #         ret = False
-    #         if isinstance(self.seq[pos_seq], DEL):
-    #             ret = len(s) > 0 and self.seq[pos_seq].check_sat(s[0]) and self.check_sat(pos_seq + 1, s[1:])
-    #         elif isinstance(self.seq[pos_seq], INS):
-    #             ret = len(s) == 0 or self.check_sat(pos_seq + 1, s[1:])
-    #         elif isinstance(self.seq[pos_seq], SUB):
-    #             ret = len(s) > 0 and self.seq[pos_seq].check_sat(s[0]) and self.check_sat(pos_seq + 1, s[1:])
-    #         elif isinstance(self.seq[pos_seq], SWAP):
-    #             ret = len(s) > 1 and self.seq[pos_seq].check_sat(s[0], s[1]) and self.check_sat(pos_seq + 1, s[2:])
-    #         else:  # tUnion and REGEX
-    #             for i in range(len(s) + 1):
-    #                 ret = self.seq[pos_seq].check_sat(s[:i]) and self.check_sat(pos_seq + 1, s[i:])
-    #                 if ret:
-    #                     break
-    #
-    #         self.cache_check_sat[(pos_seq, s)] = ret
-    #         return ret
+    def beam_search_adversarial(self, s, b):
+        '''
+        Beam search for the transformation. Not sure should the beam search be used here.
+        The HotFlip paper uses brute-force enumerate. Or it uses the beam search with b>0.
+            (since only there is only one beam in terms of position).
+        If we used beam search here: it can boost the speed, but downgrade the adversarial examples
+        This implementation used the beam search with budget the same as the outside beam search budget, b
+        :param s: the input string s
+        :param b: the budget for the beam search
+        :return: the a list of adversarial examples within budget b
+        '''
+        inner_budget = b  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
+        partial_loss = Alphabet.partial_to_loss(Alphabet.to_embedding(s))
+        ret = {}
+        if Alphabet.is_char_model:  # if character-level model
+            ret[0] = [["", 0]]
+        else:  # if word-level model
+            ret[0] = [[(), 0]]
+        for t in self.seq:
+            new_ret = {}
+            for pos in ret:
+                for output, score in ret[pos]:
+                    tmp_res = t.beam_search_adversarial(s, output, pos, inner_budget, partial_loss)
+                    for new_pos in tmp_res:
+                        if new_pos not in new_ret:
+                            new_ret[new_pos] = Beam(inner_budget)
+                        for new_output, new_score in tmp_res[
+                            new_pos]:  # the new output for all previous unit transformation
+                            new_ret[new_pos].add(new_output, score + new_score)
+
+            for pos in new_ret:
+                new_ret[pos] = new_ret[pos].check_balance()
+            ret = new_ret
+
+        if len(s) in ret:
+            true_ret = Beam(b)
+            for data, score in ret[len(s)]:
+                for i in range(len(data), len(s)):
+                    score += np.sum(partial_loss[i] * (Alphabet.mapping[Alphabet.padding] - Alphabet.mapping[s[i]]))
+                true_ret.add(data, score)
+            return true_ret.check_balance()
+        else:
+            return []
 
 
 class Union:
@@ -387,10 +398,16 @@ class Union:
         self.cache_interval[s] = ret
         return ret
 
+    def beam_search_adversarial(self, s, b):
+        ret = Beam(b)
+        for p in self.p:
+            ret.extend(p.beam_search_adversarial(s, b))
+        return ret.check_balance()
+
 
 class Composition:
     def __init__(self, *args):
-        self.p = args  # reversed
+        self.p = args  # should be reversed
         assert len(args) > 0
         self.cache_exact = {}
         self.cache_interval = {}
@@ -416,4 +433,20 @@ class Composition:
         for p in reversed(self.p):
             ret = p.interval_space(ret)
         self.cache_interval[s] = ret
+        return ret
+
+    def beam_search_adversarial(self, s, b):
+        '''
+        Beam search for adversarial examples within budget b.
+        :param s: the input s
+        :param b: the budget b
+        :return: the
+        '''
+        ret = [[s, 0]]
+        for p in reversed(self.p):
+            new_ret = Beam(b)
+            for s, score in ret:
+                new_ret.extend([[x, y + score] for (x, y) in p.beam_search_adversarial(s, b)])
+            ret = new_ret.check_balance()
+
         return ret
