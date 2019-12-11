@@ -1,3 +1,6 @@
+import numpy as np
+
+
 def tuple_set_union(ret0: tuple, ret1: tuple):
     if ret0 is None:
         return ret1
@@ -64,3 +67,17 @@ class Beam:
                 return False
 
         return True
+
+
+class Dict:
+    def __init__(self, char2id):
+        self.char2id = char2id
+        self.id2char = [" "] * len(char2id)
+        for c in char2id:
+            self.id2char[char2id[c]] = c
+
+    def to_string(self, ids):
+        return "".join([self.id2char[x] for x in ids])
+
+    def to_ids(self, s):
+        return np.array([self.char2id[c] for c in s])

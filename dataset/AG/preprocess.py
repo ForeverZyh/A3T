@@ -1,7 +1,7 @@
 import numpy as np
 import csv
 
-dict = {"space": 0}
+dict = {" ": 0}
 
 
 def map(c):
