@@ -89,7 +89,7 @@ def throughput_test():
     for _ in range(5):
         s = "a" + random_generator_200s()
         a.exact_space(s)
-        a.beam_search_adversarial(s, 10)
+        a.beam_search_adversarial(s, None, 10)
 
     print("throughput_test using " + str(time.process_time() - t) + "(s) time ...")
 
@@ -97,19 +97,20 @@ def throughput_test():
 class SimpleModel:
     def __init__(self):
         self.embedding_dim = 2
-        self.x = tf.placeholder(dtype=tf.float32, shape=[None, Alphabet.max_len * self.embedding_dim])
+        self.x = tf.placeholder(dtype=tf.float32, shape=[None, Alphabet.max_len, self.embedding_dim])
+        self.y = tf.placeholder(dtype=tf.float32, shape=[None, 3])
         W = tf.Variable(tf.random_normal([Alphabet.max_len * self.embedding_dim, 3]))
         b = tf.Variable(tf.random_normal([3]))
-        self.loss = tf.reduce_sum(tf.matmul(self.x, W) + b, axis=-1)
+        self.loss = tf.reduce_sum(
+            (tf.matmul(tf.reshape(self.x, (-1, Alphabet.max_len * self.embedding_dim)), W) + b - self.y) ** 2, axis=-1)
         self.partial_loss = tf.gradients(self.loss, self.x)[0]
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
-    def partial_to_loss(self, embedding):
-        return np.reshape(
-            self.sess.run(self.partial_loss,
-                          feed_dict={self.x: np.reshape(embedding, (-1, Alphabet.max_len * self.embedding_dim))})[0],
-            (-1, self.embedding_dim))
+    def partial_to_loss(self, embedding, y):
+        return self.sess.run(self.partial_loss,
+                             feed_dict={self.x: np.expand_dims(embedding, axis=0), self.y: np.expand_dims(y, axis=0)})[
+            0]
 
 
 def beam_search_adversarial_test():
@@ -117,19 +118,20 @@ def beam_search_adversarial_test():
     model = SimpleModel()
     Alphabet.partial_to_loss = model.partial_to_loss
     budget = 4
-    beams = a.beam_search_adversarial(s, budget)
+    y = np.array([0, 1, 0])
+    beams = a.beam_search_adversarial(s, y, budget)
     print(beams)
     outputs = a.exact_space(s)
     for output, score in beams:
         assert output in outputs
 
     # check the correctness of beam search
-    ret1 = t4.beam_search_adversarial(s, budget)
+    ret1 = t4.beam_search_adversarial(s, y, budget)
     ans = Beam(budget)
     for s1, score1 in ret1:
-        ret2 = t3.beam_search_adversarial(s1, budget)
+        ret2 = t3.beam_search_adversarial(s1, y, budget)
         for s2, score2 in ret2:
-            ret3 = t12.beam_search_adversarial(s2, budget)
+            ret3 = t12.beam_search_adversarial(s2, y, budget)
             for s3, score3 in ret3:
                 ans.add(s3, score1 + score2 + score3)
 
@@ -140,7 +142,8 @@ def beam_search_adversarial_test():
     worse_output = ""
     for output in outputs:
         t = model.sess.run(model.loss,
-                           feed_dict={model.x: np.reshape(Alphabet.to_embedding(output), (-1, Alphabet.max_len * 2))})
+                           feed_dict={model.x: np.expand_dims(Alphabet.to_embedding(output), axis=0),
+                                      model.y: np.expand_dims(y, axis=0)})
         if worse < t:
             worse = t
             worse_output = output

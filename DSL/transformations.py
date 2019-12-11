@@ -335,7 +335,7 @@ class Transformation:
         self.cache_interval[s] = final_ret
         return final_ret
 
-    def beam_search_adversarial(self, s, b):
+    def beam_search_adversarial(self, s, y_true, b):
         '''
         Beam search for the transformation. Not sure should the beam search be used here.
         The HotFlip paper uses brute-force enumerate. Or it uses the beam search with b>0.
@@ -347,7 +347,7 @@ class Transformation:
         :return: the a list of adversarial examples within budget b
         '''
         inner_budget = b  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
-        partial_loss = Alphabet.partial_to_loss(Alphabet.to_embedding(s))
+        partial_loss = Alphabet.partial_to_loss(Alphabet.to_embedding(s), y_true)
         ret = {}
         if Alphabet.is_char_model:  # if character-level model
             ret[0] = [["", 0]]
@@ -407,10 +407,10 @@ class Union:
         self.cache_interval[s] = ret
         return ret
 
-    def beam_search_adversarial(self, s, b):
+    def beam_search_adversarial(self, s, y_true, b):
         ret = Beam(b)
         for p in self.p:
-            ret.extend(p.beam_search_adversarial(s, b))
+            ret.extend(p.beam_search_adversarial(s, y_true, b))
         return ret.check_balance()
 
 
@@ -444,7 +444,7 @@ class Composition:
         self.cache_interval[s] = ret
         return ret
 
-    def beam_search_adversarial(self, s, b):
+    def beam_search_adversarial(self, s, y_true, b):
         '''
         Beam search for adversarial examples within budget b.
         :param s: the input s
@@ -455,7 +455,7 @@ class Composition:
         for p in reversed(self.p):
             new_ret = Beam(b)
             for s, score in ret:
-                new_ret.extend([[x, y + score] for (x, y) in p.beam_search_adversarial(s, b)])
+                new_ret.extend([[x, y + score] for (x, y) in p.beam_search_adversarial(s, y_true, b)])
             ret = new_ret.check_balance()
 
         return ret
