@@ -18,7 +18,7 @@ regex1 = REGEX(r'.*')
 regex2 = REGEX(r'a')
 untouched = Transformation(regex1)
 t1 = Transformation(regex1, INS(lambda c: c == 'a'), regex1)  # insert 'a' at any place
-t2 = Transformation(regex1, tUnion(SUB(lambda c: c == 'a', lambda c: 'b'), SUB(lambda c: c == 'b', lambda c: 'a')),
+t2 = Transformation(regex1, tUnion(SUB(lambda c: c == 'a', lambda c: {'b'}), SUB(lambda c: c == 'b', lambda c: {'a'})),
                     regex1)  # substitute 'a' with 'b' or 'b' with 'a'
 t3 = Transformation(regex2, SWAP(lambda c: True, lambda c: True), regex1)  # swap two adjacent after a leading 'a'
 t4 = Transformation(regex1, DEL(lambda c: c == 'b'), regex1)  # delete 'b' at any place
@@ -171,15 +171,15 @@ for i, s in enumerate(word_lists):
     dict_map[s] = i
 Alphabet.set_alphabet(dict_map, np.random.normal(0, 1, (len(dict_map), 64)))
 single2plural = Transformation(regex1, DEL(lambda w: w == "a"),
-                               SUB(lambda w: w in ["cat", "dog"], lambda w: w + "s"), regex1)
+                               SUB(lambda w: w in ["cat", "dog"], lambda w: {w + "s"}), regex1)
 plural2single = Transformation(regex1, INS(lambda w: w == "a"),
-                               SUB(lambda w: w in ["cats", "dogs"], lambda w: w[:-1]), regex1)
+                               SUB(lambda w: w in ["cats", "dogs"], lambda w: {w[:-1]}), regex1)
 verbsingle = Transformation(REGEX(r".*(dog|cat)"),
-                            tUnion(SUB(lambda w: w == "play", lambda w: w + "s"), REGEX(r"plays")), regex1)
+                            tUnion(SUB(lambda w: w == "play", lambda w: {w + "s"}), REGEX(r"plays")), regex1)
 verbplural = Transformation(REGEX(r".*(dog|cat)s"),
-                            tUnion(SUB(lambda w: w == "plays", lambda w: w[:-1]), REGEX(r"play")), regex1)
+                            tUnion(SUB(lambda w: w == "plays", lambda w: {w[:-1]}), REGEX(r"play")), regex1)
 dogcat = Transformation(regex1, SUB(lambda w: w in ["cat", "dog", "cats", "dogs"],
-                                    lambda w: "dog" + w[3:] if w[:3] == "cat" else "cat" + w[3:]), regex1)
+                                    lambda w: {"dog" + w[3:]} if w[:3] == "cat" else {"cat" + w[3:]}), regex1)
 same = Transformation(regex1)
 sub_b = Union(single2plural, plural2single, same)
 b = Composition(Union(verbplural, verbsingle), sub_b, sub_b)

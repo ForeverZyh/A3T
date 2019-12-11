@@ -185,10 +185,14 @@ class SUB:
 
     def exact_space(self, s):
         if len(s) > 0 and self.phi(s[0]):
-            if Alphabet.is_char_model:  # if character-level model
-                return {(1, self.fun(s[0]))}
-            else:  # if word-level model
-                return {(1, (self.fun(s[0]),))}
+            ret = set()
+            tmp_ret = self.fun(s[0])
+            for ss in tmp_ret:
+                if Alphabet.is_char_model:  # if character-level model
+                    ret.add((1, ss))
+                else:  # if word-level model
+                    ret.add((1, (ss,)))
+            return ret
         else:
             return set()
 
@@ -197,20 +201,25 @@ class SUB:
         if len(s) > 0:
             for single_s in s[0]:
                 if self.phi(single_s):
-                    ret += (self.fun(single_s),)
+                    tmp_ret = self.fun(single_s)
+                    for ss in tmp_ret:
+                        ret += (ss,)
         return {} if len(ret) == 0 else {1: (ret,)}
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
-        assert b > 0
         if input_pos < len(s) and self.phi(s[input_pos]):
-            if Alphabet.is_char_model:  # if character-level model
-                new_output = output + self.fun(s[input_pos])
-            else:
-                new_output = output + (self.fun(s[input_pos]),)
-            end_pos = min(len(new_output) - 1, input_pos)
-            score = np.sum(
-                partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
-            return {input_pos + 1: [[new_output, score]]}
+            ret = Beam(b)
+            tmp_ret = self.fun(s[input_pos])
+            for ss in tmp_ret:
+                if Alphabet.is_char_model:  # if character-level model
+                    new_output = output + ss
+                else:
+                    new_output = output + (ss,)
+                end_pos = min(len(new_output) - 1, input_pos)
+                score = np.sum(
+                    partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+                ret.add(new_output, score)
+            return {input_pos + 1: ret.check_balance()}
         else:
             return {}
 
