@@ -37,7 +37,8 @@ for i in range(26):
 Alphabet.set_alphabet(dict_map, np.random.normal(0, 1, (len(dict_map), 2)))
 keep_same = REGEX(r'.*')
 untouched = Transformation(keep_same)
-t1 = Transformation(keep_same, SUB(lambda c: c == 'a', lambda c: {'b', 'c'}), keep_same)  # substitute 'a' with 'b' or 'c'
+t1 = Transformation(keep_same, SUB(lambda c: c == 'a', lambda c: {'b', 'c'}),
+                    keep_same)  # substitute 'a' with 'b' or 'c'
 unit = Union(t1, untouched)
 a = Composition(unit, unit, unit)  # untouched or substitute with deletion
 res = a.interval_space(tuple([(t,) for t in "abbaabba"]))

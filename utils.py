@@ -50,37 +50,49 @@ class Beam:
         '''
         self.budget = budget
         self.queue = []
+        self.in_queue = {}
 
     def add(self, data, score):
+        if data in self.in_queue:
+            self.in_queue[data] = max(self.in_queue[data], score)
+            return
+
         if len(self.queue) == self.budget:
-            a, b = heapq.heappop(self.queue)
+            while True:
+                a, b = heapq.heappop(self.queue)
+                if a == self.in_queue[b]:
+                    break
+                else:
+                    heapq.heappush(self.queue, (self.in_queue[b], b))
+            del self.in_queue[b]
             if a > score:
-                socre, data = a, b
+                score, data = a, b
         heapq.heappush(self.queue, (score, data))
+        self.in_queue[data] = score
 
     def extend(self, others):
         if isinstance(others, list):
             for data, score in others:
                 self.add(data, score)
         else:
-            for data, score in others.queue:
-                self.add(data, score)
+            assert False
+            # for data, score in others.queue:
+            #     self.add(data, score)
 
     def check_balance(self):
         ret = []
-        while len(self.queue) > 0:
-            a, b = heapq.heappop(self.queue)
-            ret.append([b, a])
+        for data in self.in_queue:
+            ret.append([data, self.in_queue[data]])
+        ret.sort(key=lambda x: -x[1])
         return ret
 
     def is_same(self, others: list):
         if len(others) != len(self.queue):
             return False
         others.sort(key=lambda x: -x[1])
-        q = copy.deepcopy(self.queue)
         for i in range(len(others)):
-            a, b = heapq.heappop(q)
-            if others[i][0] != b or others[i][1] != a:
+            data, score = others[i]
+            if data not in self.in_queue or self.in_queue[data] != score:
                 return False
 
         return True

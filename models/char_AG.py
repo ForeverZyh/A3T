@@ -111,9 +111,8 @@ def adv_train():
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
         for x, y in zip(batch_X, batch_Y):
-            print("a")
             ret = a.beam_search_adversarial(chars.to_string(x), y, 10)
-            adv_batch_X.append(chars.to_ids(ret[-1][0]))
+            adv_batch_X.append(chars.to_ids(ret[0][0]))
         return np.array(adv_batch_X)
 
     epochs = 30
@@ -129,11 +128,11 @@ def adv_train():
             batch_Y = training_Y[i:min(training_num, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]
             adv_batch_X = adv_batch(batch_X, batch_Y)
-            model.adv_model.train_on_batch(x=(batch_X, adv_batch_X), y=batch_Y)
+            model.adv_model.train_on_batch(x=[batch_X, adv_batch_X], y=batch_Y)
 
         Alphabet.embedding = model.embed.get_weights()[0]
         adv_batch_X = adv_batch(training_X[:500], training_Y[:500])
-        loss = model.adv_model.evaluate(x=(training_X[:500], adv_batch_X), y=training_Y[:500], batch_size=64)
+        loss = model.adv_model.evaluate(x=[training_X[:500], adv_batch_X], y=training_Y[:500], batch_size=64)
         if loss > pre_loss:
             waiting += 1
             if waiting > patience:

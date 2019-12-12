@@ -97,13 +97,15 @@ def throughput_test():
 class SimpleModel:
     def __init__(self):
         self.embedding_dim = 2
-        self.x = tf.placeholder(dtype=tf.float32, shape=[None, Alphabet.max_len, self.embedding_dim])
+        self.x = tf.placeholder(dtype=tf.int32, shape=[None, Alphabet.max_len])
         self.y = tf.placeholder(dtype=tf.float32, shape=[None, 3])
+        embed = tf.Variable(tf.random_normal([27, self.embedding_dim]))
+        x = tf.gather(embed, self.x)
         W = tf.Variable(tf.random_normal([Alphabet.max_len * self.embedding_dim, 3]))
         b = tf.Variable(tf.random_normal([3]))
         self.loss = tf.reduce_sum(
-            (tf.matmul(tf.reshape(self.x, (-1, Alphabet.max_len * self.embedding_dim)), W) + b - self.y) ** 2, axis=-1)
-        self.partial_loss = tf.gradients(self.loss, self.x)[0]
+            (tf.matmul(tf.reshape(x, (-1, Alphabet.max_len * self.embedding_dim)), W) + b - self.y) ** 2, axis=-1)
+        self.partial_loss = tf.gradients(self.loss, x)[0]
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
@@ -135,14 +137,13 @@ def beam_search_adversarial_test():
             for s3, score3 in ret3:
                 ans.add(s3, score1 + score2 + score3)
 
-    ans.check_balance()
     assert ans.is_same(beams)
 
     worse = -1e20
     worse_output = ""
     for output in outputs:
         t = model.sess.run(model.loss,
-                           feed_dict={model.x: np.expand_dims(Alphabet.to_embedding(output), axis=0),
+                           feed_dict={model.x: np.expand_dims(Alphabet.toids(output), axis=0),
                                       model.y: np.expand_dims(y, axis=0)})
         if worse < t:
             worse = t
