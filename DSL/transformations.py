@@ -83,38 +83,40 @@ class REGEX:
         self.cache_exact = {}
         self.cache_interval = {}
 
-    def exact_space(self, s):
-        if s in self.cache_exact:
-            return self.cache_exact[s]
+    def exact_space(self, s, is_end=False):
+        if (s, is_end) in self.cache_exact:
+            return self.cache_exact[(s, is_end)]
         ret = set()
         for i in range(len(s) + 1):
-            if Alphabet.is_char_model:  # if character-level model
-                if self.is_any or self.regex.fullmatch(s[:i]):
-                    ret.add((i, s[:i]))
-            else:  # if word-level model
-                if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
-                    ret.add((i, s[:i]))
-        self.cache_exact[s] = ret
+            if not is_end or (is_end and i == len(s)):
+                if Alphabet.is_char_model:  # if character-level model
+                    if self.is_any or self.regex.fullmatch(s[:i]):
+                        ret.add((i, s[:i]))
+                else:  # if word-level model
+                    if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
+                        ret.add((i, s[:i]))
+        self.cache_exact[(s, is_end)] = ret
         return ret
 
-    def interval_space(self, s):
+    def interval_space(self, s, is_end=False):
         # TODO figure out a more efficient way to do this. One optimization maybe use DFA so that some prefix can be eliminated at early stage. However, it is still exponential.
-        if s in self.cache_interval:
-            return self.cache_interval[s]
+        if (s, is_end) in self.cache_interval:
+            return self.cache_interval[(s, is_end)]
         ret = {}
         for i in range(len(s) + 1):
-            for s_tuple in itertools.product(*(s[:i])):
-                if self.is_any or (Alphabet.is_char_model and self.regex.fullmatch("".join(s_tuple))) or (
-                        not Alphabet.is_char_model and self.regex.fullmatch(Alphabet.escaped_char.join(s_tuple))):
-                    if i not in ret:
-                        ret[i] = tuple([(t,) for t in s_tuple])
-                    else:
-                        ret[i] = tuple_set_union(ret[i], tuple([(t,) for t in s_tuple]))
+            if not is_end or (is_end and (i == len(s) or "" in s[i])):
+                for s_tuple in itertools.product(*(s[:i])):
+                    if self.is_any or (Alphabet.is_char_model and self.regex.fullmatch("".join(s_tuple))) or (
+                            not Alphabet.is_char_model and self.regex.fullmatch(Alphabet.escaped_char.join(s_tuple))):
+                        if i not in ret:
+                            ret[i] = tuple([(t,) for t in s_tuple])
+                        else:
+                            ret[i] = tuple_set_union(ret[i], tuple([(t,) for t in s_tuple]))
 
-        self.cache_interval[s] = ret
+        self.cache_interval[(s, is_end)] = ret
         return ret
 
-    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss, is_end=False):
         assert b > 0
         ret = {}
         new_output = output
@@ -128,12 +130,13 @@ class REGEX:
                 end_pos = min(len(new_output) - 1, i - 1)
                 score += np.sum(
                     partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
-            if Alphabet.is_char_model:  # if character-level model
-                if self.is_any or self.regex.fullmatch(s[:i]):
-                    ret[i] = [[new_output, score]]
-            else:  # if word-level model
-                if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
-                    ret[i] = [[new_output, score]]
+            if not is_end or (is_end and i == len(s)):
+                if Alphabet.is_char_model:  # if character-level model
+                    if self.is_any or self.regex.fullmatch(s[:i]):
+                        ret[i] = [[new_output, score]]
+                else:  # if word-level model
+                    if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
+                        ret[i] = [[new_output, score]]
 
         return ret
 
@@ -275,10 +278,14 @@ class tUnion:
 
 
 class Transformation:
-    def __init__(self, *arg):
+    def __init__(self, *arg, **kwargs):
         self.seq = arg
         self.cache_exact = {}
         self.cache_interval = {}
+        if "inner_budget" in kwargs:
+            self.inner_budget = kwargs["inner_budget"]
+        else:
+            self.inner_budget = None
         for x in self.seq:
             assert isinstance(x, REGEX) or isinstance(x, DEL) or isinstance(x, INS) or isinstance(x, SWAP) \
                    or isinstance(x, SUB) or isinstance(x, tUnion)
@@ -291,10 +298,13 @@ class Transformation:
             ret.add((0, ""))
         else:  # if word-level model
             ret.add((0, ()))
-        for t in self.seq:
+        for (i_seq, t) in enumerate(self.seq):
             new_ret = set()
             for pos, output in ret:
-                tmp_res = t.exact_space(s[pos:])
+                if isinstance(t, REGEX):
+                    tmp_res = t.exact_space(s[pos:], i_seq + 1 == len(self.seq))
+                else:
+                    tmp_res = t.exact_space(s[pos:])
                 for new_pos, new_output in tmp_res:
                     new_ret.add((pos + new_pos, output + new_output))
             ret = new_ret
@@ -314,7 +324,10 @@ class Transformation:
             new_ret = {}
             for pos in ret:
                 output = ret[pos]
-                tmp_res = t.interval_space(s[pos:])
+                if isinstance(t, REGEX):
+                    tmp_res = t.interval_space(s[pos:], pos_seq + 1 == len(self.seq))
+                else:
+                    tmp_res = t.interval_space(s[pos:])
                 for new_pos in tmp_res:
                     new_output = tmp_res[new_pos]
                     final_pos = new_pos + pos
@@ -347,18 +360,22 @@ class Transformation:
         :param b: the budget for the beam search
         :return: the a list of adversarial examples within budget b
         '''
-        inner_budget = b  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
+        inner_budget = b if self.inner_budget is None else self.inner_budget  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
         partial_loss = Alphabet.partial_to_loss(Alphabet.toids(s), y_true)
         ret = {}
         if Alphabet.is_char_model:  # if character-level model
             ret[0] = [["", 0]]
         else:  # if word-level model
             ret[0] = [[(), 0]]
-        for t in self.seq:
+        for (i_seq, t) in enumerate(self.seq):
             new_ret = {}
             for pos in ret:
                 for output, score in ret[pos]:
-                    tmp_res = t.beam_search_adversarial(s, output, pos, inner_budget, partial_loss)
+                    if isinstance(t, REGEX):
+                        tmp_res = t.beam_search_adversarial(s, output, pos, inner_budget, partial_loss,
+                                                            i_seq + 1 == len(self.seq))
+                    else:
+                        tmp_res = t.beam_search_adversarial(s, output, pos, inner_budget, partial_loss)
                     for new_pos in tmp_res:
                         if new_pos not in new_ret:
                             new_ret[new_pos] = Beam(inner_budget)
