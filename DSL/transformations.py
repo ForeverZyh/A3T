@@ -342,12 +342,12 @@ class Transformation:
         The HotFlip paper uses brute-force enumerate. Or it uses the beam search with b>0.
             (since only there is only one beam in terms of position).
         If we used beam search here: it can boost the speed, but downgrade the adversarial examples
-        This implementation used the beam search with budget = 1
+        This implementation used the beam search with budget the same as the outside beam search budget, b
         :param s: the input string s
         :param b: the budget for the beam search
         :return: the a list of adversarial examples within budget b
         '''
-        inner_budget = 1  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
+        inner_budget = b  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
         partial_loss = Alphabet.partial_to_loss(Alphabet.toids(s), y_true)
         ret = {}
         if Alphabet.is_char_model:  # if character-level model
