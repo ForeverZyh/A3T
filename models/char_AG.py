@@ -16,7 +16,7 @@ class char_AG:
     def __init__(self, all_voc_size=64, D=64):
         self.all_voc_size = all_voc_size
         self.D = D
-        self.c = Input(shape=(300,), dtype='int32', name="input")
+        self.c = Input(shape=(300,), dtype='int32')
         self.y = Input(shape=(4,), dtype='float32')
         self.embed = Embedding(self.all_voc_size, self.D, name="embedding")
         look_up_c_d3 = self.embed(self.c)
@@ -43,12 +43,12 @@ class char_AG:
         self.partial_to_loss_model = Model(inputs=[self.c, self.y], outputs=partial)
 
         def lambda_partial(x, y):
-            return self.partial_to_loss_model.predict(x=[np.expand_dims(x, axis=0), np.expand_dims(y, axis=0)])
+            return self.partial_to_loss_model.predict(x=[np.expand_dims(x, axis=0), np.expand_dims(y, axis=0)])[0]
 
         self.partial_to_loss = lambda_partial
 
     def adversarial_training(self):
-        self.adv = Input(shape=(300,), dtype='int32', name="input")
+        self.adv = Input(shape=(300,), dtype='int32')
         look_up_c = self.embed(self.adv)
         look_up_c = Lambda(lambda x: K.expand_dims(x, -1))(look_up_c)
         x = self.conv2d(look_up_c)
@@ -57,8 +57,8 @@ class char_AG:
         x = self.fc1(x)
         x = self.fc2(x)
         self.adv_logits = self.fc3(x)
-        self.weighted_logits = Lambda(lambda x: self.adv_logits * x + self.logits * (1 - x))(0.5)
-        self.adv_model = Model(inputs=(self.c, self.adv), outputs=self.weighted_logits)
+        self.weighted_logits = Lambda(lambda x: x[0] * 0.5 + x[1] * 0.5)([self.adv_logits, self.logits])
+        self.adv_model = Model(inputs=[self.c, self.adv], outputs=self.weighted_logits)
         self.adv_model.compile(optimizer='RMSprop', loss='categorical_crossentropy')
 
 
@@ -96,7 +96,7 @@ def adv_train():
     Alphabet.max_len = 300
     Alphabet.padding = " "
     dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
-    Alphabet.set_alphabet(dict_map, np.zeros(64, 64))
+    Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
     keep_same = REGEX(r".*")
     chars = Dict(dict_map)
     sub_chars = []
@@ -105,14 +105,15 @@ def adv_train():
             sub_chars.append(c)
 
     sub = Transformation(keep_same, SUB(lambda c: c != " ", lambda c: set(sub_chars)), keep_same)
-    a = Composition(sub, sub, sub)
+    # a = Composition(sub, sub)
+    a = sub
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
         for x, y in zip(batch_X, batch_Y):
+            print("a")
             ret = a.beam_search_adversarial(chars.to_string(x), y, 10)
-            ret.sort(lambda x: -x[1])
-            adv_batch_X.append(chars.to_ids(ret[0][0]))
+            adv_batch_X.append(chars.to_ids(ret[-1][0]))
         return np.array(adv_batch_X)
 
     epochs = 30
@@ -121,7 +122,9 @@ def adv_train():
     patience = 5
     waiting = 0
     for epoch in range(epochs):
+        print("epoch %d:" % epoch)
         for i in range(0, training_num, batch_size):
+            print(f'\radversarial training at %d/%d' % (i, training_num), flush=True)
             batch_X = training_X[i:min(training_num, i + batch_size)]
             batch_Y = training_Y[i:min(training_num, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]

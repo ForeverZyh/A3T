@@ -27,15 +27,15 @@ class Alphabet:
     '''
 
     @staticmethod
-    def to_embedding(s):
+    def toids(s):
         if Alphabet.max_len is None or Alphabet.padding is None:
             raise AttributeError("max_len or padding is not set!")
 
         ret = []
         for ss in s:
-            ret.append(Alphabet.embedding[Alphabet.mapping[ss]])
+            ret.append(Alphabet.mapping[ss])
         for _ in range(Alphabet.max_len - len(s)):
-            ret.append(Alphabet.embedding[Alphabet.mapping[Alphabet.padding]])
+            ret.append(Alphabet.mapping[Alphabet.padding])
         return np.array(ret)
 
     @staticmethod

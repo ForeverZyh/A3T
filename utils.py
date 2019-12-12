@@ -1,6 +1,8 @@
 import numpy as np
 import keras
 import keras.backend as K
+import heapq
+import copy
 
 
 class Gradient(keras.layers.Layer):
@@ -50,12 +52,11 @@ class Beam:
         self.queue = []
 
     def add(self, data, score):
-        for i, (data_in_queue, score_in_queue) in enumerate(self.queue):
-            if data_in_queue == data:
-                self.queue[i][1] = max(self.queue[i][1], score)
-                return
-
-        self.queue.append([data, score])
+        if len(self.queue) == self.budget:
+            a, b = heapq.heappop(self.queue)
+            if a > score:
+                socre, data = a, b
+        heapq.heappush(self.queue, (score, data))
 
     def extend(self, others):
         if isinstance(others, list):
@@ -66,22 +67,20 @@ class Beam:
                 self.add(data, score)
 
     def check_balance(self):
-        if self.budget < len(self.queue):
-            self.queue.sort(key=lambda x: -x[1])
-            self.queue = self.queue[:self.budget]
-        return self.queue
-
-    def add_score(self, score):
-        for i in range(len(self.queue)):
-            self.queue[i][1] += score
+        ret = []
+        while len(self.queue) > 0:
+            a, b = heapq.heappop(self.queue)
+            ret.append([b, a])
+        return ret
 
     def is_same(self, others: list):
         if len(others) != len(self.queue):
             return False
         others.sort(key=lambda x: -x[1])
-        self.queue.sort(key=lambda x: -x[1])
+        q = copy.deepcopy(self.queue)
         for i in range(len(others)):
-            if others[i][0] != self.queue[i][0] or others[i][1] != self.queue[i][1]:
+            a, b = heapq.heappop(q)
+            if others[i][0] != b or others[i][1] != a:
                 return False
 
         return True

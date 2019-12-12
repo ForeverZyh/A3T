@@ -78,6 +78,7 @@ class DEL:
 
 class REGEX:
     def __init__(self, regex):
+        self.is_any = regex == r'.*'
         self.regex = re.compile(regex)
         self.cache_exact = {}
         self.cache_interval = {}
@@ -88,10 +89,10 @@ class REGEX:
         ret = set()
         for i in range(len(s) + 1):
             if Alphabet.is_char_model:  # if character-level model
-                if self.regex.fullmatch(s[:i]):
+                if self.is_any or self.regex.fullmatch(s[:i]):
                     ret.add((i, s[:i]))
             else:  # if word-level model
-                if self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
+                if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
                     ret.add((i, s[:i]))
         self.cache_exact[s] = ret
         return ret
@@ -103,7 +104,7 @@ class REGEX:
         ret = {}
         for i in range(len(s) + 1):
             for s_tuple in itertools.product(*(s[:i])):
-                if (Alphabet.is_char_model and self.regex.fullmatch("".join(s_tuple))) or (
+                if self.is_any or (Alphabet.is_char_model and self.regex.fullmatch("".join(s_tuple))) or (
                         not Alphabet.is_char_model and self.regex.fullmatch(Alphabet.escaped_char.join(s_tuple))):
                     if i not in ret:
                         ret[i] = tuple([(t,) for t in s_tuple])
@@ -128,10 +129,10 @@ class REGEX:
                 score += np.sum(
                     partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
             if Alphabet.is_char_model:  # if character-level model
-                if self.regex.fullmatch(s[:i]):
+                if self.is_any or self.regex.fullmatch(s[:i]):
                     ret[i] = [[new_output, score]]
             else:  # if word-level model
-                if self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
+                if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
                     ret[i] = [[new_output, score]]
 
         return ret
@@ -347,7 +348,7 @@ class Transformation:
         :return: the a list of adversarial examples within budget b
         '''
         inner_budget = b  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
-        partial_loss = Alphabet.partial_to_loss(Alphabet.to_embedding(s), y_true)
+        partial_loss = Alphabet.partial_to_loss(Alphabet.toids(s), y_true)
         ret = {}
         if Alphabet.is_char_model:  # if character-level model
             ret[0] = [["", 0]]
