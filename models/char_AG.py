@@ -74,7 +74,7 @@ def train():
     model = char_AG()
     model.model.fit(x=training_X, y=training_Y, batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
                     validation_data=(training_X[:500], training_Y[:500]), shuffle=True)
-    model.model.save_weights(filepath="../tmp/char_AG")
+    model.model.save_weights(filepath="./tmp/char_AG")
 
 
 def adv_train():
