@@ -100,7 +100,7 @@ def adv_train(saved_model_file, adv_model_file):
     keep_same = REGEX(r".*")
     chars = Dict(dict_map)
     sub = Transformation(keep_same,
-                         SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: set(Alphabet.adjacent_keys[c])),
+                         SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: set(Alphabet.adjacent_keys[c]).intersection(set(Alphabet.alphabet))),
                          keep_same)
     # a = Composition(sub, sub)
     a = sub
@@ -110,9 +110,13 @@ def adv_train(saved_model_file, adv_model_file):
         arg_list = []
         for x, y in zip(batch_X, batch_Y):
             arg_list.append((chars.to_string(x), y, 3))
-        rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8)
-        for ret in rets:
+
+        # rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 1)
+        # print(rets)
+        for arg in arg_list:
+            ret = a.beam_search_adversarial(*arg)
             adv_batch_X.append(chars.to_ids(ret[0][0]))
+
         return np.array(adv_batch_X)
 
     epochs = 30
@@ -160,6 +164,8 @@ def test_model(saved_model_file):
     # normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
     # print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
     dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
+    Alphabet.set_char_model()
+    Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
     chars = Dict(dict_map)
     adv_acc = 0
     for x, y in zip(test_X, test_Y):
@@ -168,11 +174,18 @@ def test_model(saved_model_file):
         for _ in range(64):
             s = chars.to_string(x)
             for subs in range(1):
-                t = np.random.randint(0, len(s))
-                while s[t] in Alphabet.adjacent_keys:
+                sub_chars = []
+                while True:
                     t = np.random.randint(0, len(s))
-                id = np.random.randint(0, len(Alphabet.adjacent_keys[s[t]]))
-                s = s[:t] + Alphabet.adjacent_keys[s[t]][id] + s[t + 1:]
+                    if s[t] not in Alphabet.adjacent_keys:
+                        continue
+                    sub_chars = list(set(Alphabet.adjacent_keys[s[t]]).intersection(Alphabet.alphabet))
+                    if len(sub_chars) == 0:
+                        continue
+                    id = np.random.randint(0, len(sub_chars))
+                    break
+
+                s = s[:t] + sub_chars[id] + s[t + 1:]
 
             X.append(chars.to_ids(s))
             Y.append(y)
