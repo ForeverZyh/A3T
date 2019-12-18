@@ -55,7 +55,7 @@ class Alphabet:
         for s in a:
             Alphabet.alphabet[a[s]] = s
         for s in Alphabet.adjacent_keys_ord:
-            t = set(Alphabet.adjacent_keys_ord).intersection(a.keys())
+            t = set(Alphabet.adjacent_keys_ord[s]).intersection(a.keys())
             if len(t) > 0:
                 Alphabet.adjacent_keys[s] = t
         Alphabet.embedding = embedding
