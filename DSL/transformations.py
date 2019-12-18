@@ -381,7 +381,8 @@ class Transformation:
                             new_ret[new_pos] = Beam(inner_budget)
                         for new_output, new_score in tmp_res[
                             new_pos]:  # the new output for all previous unit transformation
-                            new_ret[new_pos].add(new_output, score + new_score)
+                            if not new_ret[new_pos].add(new_output, score + new_score):
+                                break
 
             for pos in new_ret:
                 new_ret[pos] = new_ret[pos].check_balance()

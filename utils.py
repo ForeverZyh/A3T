@@ -54,9 +54,12 @@ class Beam:
 
     def add(self, data, score):
         if data in self.in_queue:
-            self.in_queue[data] = max(self.in_queue[data], score)
-            return
+            if self.in_queue[data] < score:
+                self.in_queue[data] = score
+                return True
+            return False
 
+        ret = True
         if len(self.queue) == self.budget:
             while True:
                 a, b = heapq.heappop(self.queue)
@@ -67,8 +70,11 @@ class Beam:
             del self.in_queue[b]
             if a > score:
                 score, data = a, b
+                ret = False
+
         heapq.heappush(self.queue, (score, data))
         self.in_queue[data] = score
+        return ret
 
     def extend(self, others):
         if isinstance(others, list):
