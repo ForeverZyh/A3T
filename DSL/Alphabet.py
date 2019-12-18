@@ -53,6 +53,8 @@ class Alphabet:
         Alphabet.mapping = a
         for s in a:
             Alphabet.alphabet[a[s]] = s
+        for s in Alphabet.adjacent_keys_ord:
+            Alphabet.adjacent_keys[s] = set(Alphabet.adjacent_keys_ord).intersection(a.keys())
         Alphabet.embedding = embedding
         assert len(embedding) == len(a)
 
