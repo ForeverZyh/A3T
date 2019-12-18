@@ -11,6 +11,11 @@ class Alphabet:
     embedding = None
     max_len = None
     padding = None
+    lines = open("./dataset/en.key").readlines()
+    adjacent_keys = {}
+    for line in lines:
+        tmp = line.strip().split()
+        adjacent_keys[tmp[0]] = tmp[1:]
 
     @staticmethod
     def partial_to_loss(x, y):
