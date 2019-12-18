@@ -100,7 +100,7 @@ def adv_train(saved_model_file, adv_model_file):
     keep_same = REGEX(r".*")
     chars = Dict(dict_map)
     sub = Transformation(keep_same,
-                         SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: set(Alphabet.adjacent_keys[c]).intersection(set(Alphabet.alphabet))),
+                         SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
                          keep_same)
     # a = Composition(sub, sub)
     a = sub
@@ -174,17 +174,12 @@ def test_model(saved_model_file):
         for _ in range(64):
             s = chars.to_string(x)
             for subs in range(1):
-                sub_chars = []
-                while True:
+                t = np.random.randint(0, len(s))
+                while s[t] not in Alphabet.adjacent_keys:
                     t = np.random.randint(0, len(s))
-                    if s[t] not in Alphabet.adjacent_keys:
-                        continue
-                    sub_chars = list(set(Alphabet.adjacent_keys[s[t]]).intersection(Alphabet.alphabet))
-                    if len(sub_chars) == 0:
-                        continue
-                    id = np.random.randint(0, len(sub_chars))
-                    break
 
+                sub_chars = list(Alphabet.adjacent_keys[s[t]])
+                id = np.random.randint(0, len(sub_chars))
                 s = s[:t] + sub_chars[id] + s[t + 1:]
 
             X.append(chars.to_ids(s))

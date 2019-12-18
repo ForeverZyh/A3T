@@ -13,9 +13,10 @@ class Alphabet:
     padding = None
     lines = open("./dataset/en.key").readlines()
     adjacent_keys = {}
+    adjacent_keys_ord = {}
     for line in lines:
         tmp = line.strip().split()
-        adjacent_keys[tmp[0]] = tmp[1:]
+        adjacent_keys_ord[tmp[0]] = tmp[1:]
 
     @staticmethod
     def partial_to_loss(x, y):
@@ -54,7 +55,9 @@ class Alphabet:
         for s in a:
             Alphabet.alphabet[a[s]] = s
         for s in Alphabet.adjacent_keys_ord:
-            Alphabet.adjacent_keys[s] = set(Alphabet.adjacent_keys_ord).intersection(a.keys())
+            t = set(Alphabet.adjacent_keys_ord).intersection(a.keys())
+            if len(t) > 0:
+                Alphabet.adjacent_keys[s] = t
         Alphabet.embedding = embedding
         assert len(embedding) == len(a)
 
