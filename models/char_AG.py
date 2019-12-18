@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union
 from DSL.Alphabet import Alphabet
-from utils import Dict, Gradient
+from utils import Dict, Gradient, Multiprocessing
 
 
 class char_AG:
@@ -59,10 +59,10 @@ class char_AG:
         self.adv_logits = self.fc3(x)
         self.weighted_logits = Lambda(lambda x: x[0] * 0.5 + x[1] * 0.5)([self.adv_logits, self.logits])
         self.adv_model = Model(inputs=[self.c, self.adv], outputs=self.weighted_logits)
-        self.adv_model.compile(optimizer='RMSprop', loss='categorical_crossentropy')
+        self.adv_model.compile(optimizer='RMSprop', loss='categorical_crossentropy', metrics=['accuracy'])
 
 
-def train():
+def train(filname):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -74,10 +74,10 @@ def train():
     model = char_AG()
     model.model.fit(x=training_X, y=training_Y, batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
                     validation_data=(training_X[:500], training_Y[:500]), shuffle=True)
-    model.model.save_weights(filepath="./tmp/char_AG")
+    model.model.save_weights(filepath="./tmp/%s" % filname)
 
 
-def adv_train():
+def adv_train(saved_model_file, adv_model_file):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -88,7 +88,7 @@ def adv_train():
     training_num = len(training_X)
 
     model = char_AG()
-    model.model.load_weights("./tmp/char_AG")
+    model.model.load_weights("./tmp/%s" % saved_model_file)
 
     model.adversarial_training()
     Alphabet.set_char_model()
@@ -110,8 +110,11 @@ def adv_train():
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
+        arg_list = []
         for x, y in zip(batch_X, batch_Y):
-            ret = a.beam_search_adversarial(chars.to_string(x), y, 10)
+            arg_list.append((chars.to_string(x), y, 3))
+        rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8)
+        for ret in rets:
             adv_batch_X.append(chars.to_ids(ret[0][0]))
         return np.array(adv_batch_X)
 
@@ -132,7 +135,8 @@ def adv_train():
 
         Alphabet.embedding = model.embed.get_weights()[0]
         adv_batch_X = adv_batch(training_X[:500], training_Y[:500])
-        loss = model.adv_model.evaluate(x=[training_X[:500], adv_batch_X], y=training_Y[:500], batch_size=64)
+        loss, acc = model.adv_model.evaluate(x=[training_X[:500], adv_batch_X], y=training_Y[:500], batch_size=64)
+        print("adv loss: %.2f\t adv acc: %.2f" % (loss, acc))
         if loss > pre_loss:
             waiting += 1
             if waiting > patience:
@@ -141,4 +145,42 @@ def adv_train():
             waiting = 0
             pre_loss = loss
 
-    model.adv_model.save_weights(filepath="./tmp/char_AG_adv")
+    model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
+
+
+def test_model(saved_model_file):
+    training_X = np.load("./dataset/AG/X_train.npy")
+    training_y = np.load("./dataset/AG/y_train.npy")
+    test_X = np.load("./dataset/AG/X_test.npy")
+    test_y = np.load("./dataset/AG/y_test.npy")
+    nb_classes = 4
+    training_Y = to_categorical(training_y, nb_classes)
+    test_Y = to_categorical(test_y, nb_classes)
+    training_num = len(training_X)
+
+    model = char_AG()
+    model.model.load_weights("./tmp/%s" % saved_model_file)
+    # normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    # print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
+    dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
+    chars = Dict(dict_map)
+    adv_acc = 0
+    for x, y in zip(test_X, test_Y):
+        X = []
+        Y = []
+        for _ in range(64):
+            s = chars.to_string(x)
+            for subs in range(1):
+                t = np.random.randint(0, len(s))
+                while s[t] < 'a' or s[t] > 'z':
+                    t = np.random.randint(0, len(s))
+                s = s[:t] + chr(np.random.randint(0, 26) + 97) + s[t + 1:]
+
+            X.append(chars.to_ids(s))
+            Y.append(y)
+
+        loss, acc = model.model.test_on_batch(np.array(X), np.array(Y))
+        if acc == 1:
+            adv_acc += 1
+
+    print("adv acc: %.2f" % (adv_acc * 1.0 / len(test_Y)))

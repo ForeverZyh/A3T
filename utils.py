@@ -3,6 +3,38 @@ import keras
 import keras.backend as K
 import heapq
 import copy
+from multiprocessing import Pool, Process, SimpleQueue
+
+
+class Multiprocessing:
+    @staticmethod
+    def work(fun, num, q, args):
+        ret = fun(*args)
+        q.put((num, ret[0]))
+
+    @staticmethod
+    def mapping(fun, args_list, processes):
+        q = SimpleQueue()
+        ans = [None] * len(args_list)
+
+        for batch_start in range(0, len(args_list), processes):
+            ps = []
+            for i in range(batch_start, min(batch_start + processes, len(args_list))):
+                p = Process(target=Multiprocessing.work, args=(fun, i, q, args_list[i]))
+                p.start()
+                ps.append(p)
+
+            while not q.empty():
+                id, ret = q.get()
+                ans[id] = ret
+
+            for p in ps:
+                p.join()
+
+        while not q.empty():
+            id, ret = q.get()
+            ans[id] = ret
+        return ans
 
 
 class Gradient(keras.layers.Layer):

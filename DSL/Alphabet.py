@@ -11,7 +11,11 @@ class Alphabet:
     embedding = None
     max_len = None
     padding = None
-    partial_to_loss = lambda x, y: np.random.uniform(-1, 1, x.shape)
+
+    @staticmethod
+    def partial_to_loss(x, y):
+        return np.random.uniform(-1, 1, x.shape)
+
     '''
     :param alphabet: the alphabet of input strings, if it is char-level model, the type is str. If word-level model, 
         the type if tuple(str)

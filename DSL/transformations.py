@@ -166,6 +166,7 @@ class SWAP:
         return {} if len(ret[0]) == 0 or len(ret[1]) == 0 else {2: tuple(ret)}
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        assert b > 0
         if input_pos + 1 < len(s) and self.phi[0](s[input_pos]) and self.phi[1](s[input_pos + 1]):
             if Alphabet.is_char_model:  # if character-level model
                 new_output = output + s[input_pos + 1] + s[input_pos]
@@ -212,7 +213,7 @@ class SUB:
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         if input_pos < len(s) and self.phi(s[input_pos]):
-            ret = Beam(b)
+            ret = Beam(1)
             tmp_ret = self.fun(s[input_pos])
             for ss in tmp_ret:
                 if Alphabet.is_char_model:  # if character-level model

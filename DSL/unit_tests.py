@@ -5,28 +5,67 @@ import tensorflow as tf
 
 from DSL.transformations import REGEX, Transformation, INS, tUnion, SWAP, SUB, DEL, Composition, Union
 from DSL.Alphabet import Alphabet
-from utils import tuple_set_union, Beam
-
-Alphabet.set_char_model()
-Alphabet.max_len = 10
-Alphabet.padding = " "
-dict_map = {" ": 0}
-for i in range(26):
-    dict_map[chr(97 + i)] = i + 1
-Alphabet.set_alphabet(dict_map, np.random.normal(0, 1, (len(dict_map), 2)))
-regex1 = REGEX(r'.*')
-regex2 = REGEX(r'a')
-untouched = Transformation(regex1)
-t1 = Transformation(regex1, INS(lambda c: c == 'a'), regex1)  # insert 'a' at any place
-t2 = Transformation(regex1, tUnion(SUB(lambda c: c == 'a', lambda c: {'b'}), SUB(lambda c: c == 'b', lambda c: {'a'})),
-                    regex1)  # substitute 'a' with 'b' or 'b' with 'a'
-t3 = Transformation(regex2, SWAP(lambda c: True, lambda c: True), regex1)  # swap two adjacent after a leading 'a'
-t4 = Transformation(regex1, DEL(lambda c: c == 'b'), regex1)  # delete 'b' at any place
-t12 = Union(t1, t2)
-a = Composition(t12, t3, t4)  # first delete then swap then (insert or substitute)
+from utils import tuple_set_union, Beam, Multiprocessing
 
 
-def char_test():
+def do_test():
+    Alphabet.set_char_model()
+    Alphabet.max_len = 10
+    Alphabet.padding = " "
+    dict_map = {" ": 0}
+    for i in range(26):
+        dict_map[chr(97 + i)] = i + 1
+    Alphabet.set_alphabet(dict_map, np.random.normal(0, 1, (len(dict_map), 2)))
+    regex1 = REGEX(r'.*')
+    regex2 = REGEX(r'a')
+    untouched = Transformation(regex1)
+    t1 = Transformation(regex1, INS(lambda c: c == 'a'), regex1)  # insert 'a' at any place
+    t2 = Transformation(regex1,
+                        tUnion(SUB(lambda c: c == 'a', lambda c: {'b'}), SUB(lambda c: c == 'b', lambda c: {'a'})),
+                        regex1)  # substitute 'a' with 'b' or 'b' with 'a'
+    t3 = Transformation(regex2, SWAP(lambda c: True, lambda c: True), regex1)  # swap two adjacent after a leading 'a'
+    t4 = Transformation(regex1, DEL(lambda c: c == 'b'), regex1)  # delete 'b' at any place
+    t12 = Union(t1, t2)
+    ssub = SUB(lambda c: c != ' ', lambda c: set([chr(97 + i) for i in range(26)]))
+    sub_single = Transformation(regex1, ssub, regex1)
+    dl_sub = Composition(sub_single, sub_single, sub_single)
+
+    a = Composition(t12, t3, t4)  # first delete then swap then (insert or substitute)
+
+    char_test(a)
+    interval_char_test(a)
+    convex_char_test(a)
+    throughput_test(a)
+    throughput_test1(dl_sub)
+    beam_search_adversarial_test(a, t12, t3, t4)
+
+    Alphabet.set_word_model()
+    dict_map = {}
+    word_lists = ["a", "cat", "plays", "with", "dog", "some", "cats", "dogs", "play", "in", "room", "the", "today", " "]
+    for i, s in enumerate(word_lists):
+        dict_map[s] = i
+    Alphabet.set_alphabet(dict_map, np.random.normal(0, 1, (len(dict_map), 64)))
+    single2plural = Transformation(regex1, DEL(lambda w: w == "a"),
+                                   SUB(lambda w: w in ["cat", "dog"], lambda w: {w + "s"}), regex1)
+    plural2single = Transformation(regex1, INS(lambda w: w == "a"),
+                                   SUB(lambda w: w in ["cats", "dogs"], lambda w: {w[:-1]}), regex1)
+    verbsingle = Transformation(REGEX(r".*(dog|cat)"),
+                                tUnion(SUB(lambda w: w == "play", lambda w: {w + "s"}), REGEX(r"plays")), regex1)
+    verbplural = Transformation(REGEX(r".*(dog|cat)s"),
+                                tUnion(SUB(lambda w: w == "plays", lambda w: {w[:-1]}), REGEX(r"play")), regex1)
+    dogcat = Transformation(regex1, SUB(lambda w: w in ["cat", "dog", "cats", "dogs"],
+                                        lambda w: {"dog" + w[3:]} if w[:3] == "cat" else {"cat" + w[3:]}), regex1)
+    same = Transformation(regex1)
+    sub_b = Union(single2plural, plural2single, same)
+    b = Composition(Union(verbplural, verbsingle), sub_b, sub_b)
+    sub_b1 = Union(dogcat, dogcat, same)
+    b1 = Composition(sub_b1, sub_b1, b)
+
+    word_test(b, b1)
+    word_interval_test(b, b1)
+
+
+def char_test(a):
     res = a.exact_space("abcsabb")
     correct_res = set(
         "aascabb asacabb ascaabb ascabab ascabba aacbsab acabsab acbasab acbsaab acbsaba bscabb ascbbb ascaab ascaba bcbsab acasab acbsbb acbsaa".split())
@@ -40,9 +79,9 @@ def char_test():
     '''
 
 
-def random_generator_200s():
+def random_generator_300s():
     s = ""
-    for i in range(200):
+    for i in range(300):
         s += chr(np.random.randint(0, 26) + 97)
         if np.random.rand() < 0.2:
             s += " "
@@ -61,8 +100,8 @@ def is_precise(res, precise_res):
     return True
 
 
-def interval_char_test():
-    ss = ['abcsabb'] + [random_generator_200s() for _ in range(0)]
+def interval_char_test(a):
+    ss = ['abcsabb'] + [random_generator_300s() for _ in range(0)]
     for s in ss:
         res = a.interval_space(tuple([(t,) for t in s]))
         precise_res = Alphabet.to_interval_space(a.exact_space(s))
@@ -74,8 +113,8 @@ def interval_char_test():
     print("interval_char_test passed...")
 
 
-def convex_char_test():
-    ss = ['abcsabb'] + [random_generator_200s() for _ in range(0)]
+def convex_char_test(a):
+    ss = ['abcsabb'] + [random_generator_300s() for _ in range(0)]
     for s in ss:
         precise_res = a.exact_space(s)
         convex = Alphabet.to_convex_hull(precise_res, s)
@@ -84,12 +123,19 @@ def convex_char_test():
     print("convex_char_test passed...")
 
 
-def throughput_test():
+def throughput_test1(dl_sub):
+    t = time.time()
+    ans = Multiprocessing.mapping(dl_sub.beam_search_adversarial,
+                                  [(random_generator_300s(), None, 3) for _ in range(16)], 8)
+    print(ans)
+    print("throughput_test1 using " + str(time.time() - t) + "(s) time ...")
+
+
+def throughput_test(a):
     t = time.process_time()
     for _ in range(5):
-        s = "a" + random_generator_200s()
+        s = "a" + random_generator_300s()
         a.exact_space(s)
-        a.beam_search_adversarial(s, None, 10)
 
     print("throughput_test using " + str(time.process_time() - t) + "(s) time ...")
 
@@ -115,7 +161,7 @@ class SimpleModel:
             0]
 
 
-def beam_search_adversarial_test():
+def beam_search_adversarial_test(a, t12, t3, t4):
     s = 'abcsabb'
     model = SimpleModel()
     Alphabet.partial_to_loss = model.partial_to_loss
@@ -162,36 +208,7 @@ def beam_search_adversarial_test():
     print("beam_search_adversarial_test passed...")
 
 
-char_test()
-interval_char_test()
-convex_char_test()
-throughput_test()
-beam_search_adversarial_test()
-
-Alphabet.set_word_model()
-dict_map = {}
-word_lists = ["a", "cat", "plays", "with", "dog", "some", "cats", "dogs", "play", "in", "room", "the", "today", " "]
-for i, s in enumerate(word_lists):
-    dict_map[s] = i
-Alphabet.set_alphabet(dict_map, np.random.normal(0, 1, (len(dict_map), 64)))
-single2plural = Transformation(regex1, DEL(lambda w: w == "a"),
-                               SUB(lambda w: w in ["cat", "dog"], lambda w: {w + "s"}), regex1)
-plural2single = Transformation(regex1, INS(lambda w: w == "a"),
-                               SUB(lambda w: w in ["cats", "dogs"], lambda w: {w[:-1]}), regex1)
-verbsingle = Transformation(REGEX(r".*(dog|cat)"),
-                            tUnion(SUB(lambda w: w == "play", lambda w: {w + "s"}), REGEX(r"plays")), regex1)
-verbplural = Transformation(REGEX(r".*(dog|cat)s"),
-                            tUnion(SUB(lambda w: w == "plays", lambda w: {w[:-1]}), REGEX(r"play")), regex1)
-dogcat = Transformation(regex1, SUB(lambda w: w in ["cat", "dog", "cats", "dogs"],
-                                    lambda w: {"dog" + w[3:]} if w[:3] == "cat" else {"cat" + w[3:]}), regex1)
-same = Transformation(regex1)
-sub_b = Union(single2plural, plural2single, same)
-b = Composition(Union(verbplural, verbsingle), sub_b, sub_b)
-sub_b1 = Union(dogcat, dogcat, same)
-b1 = Composition(sub_b1, sub_b1, b)
-
-
-def word_test():
+def word_test(b, b1):
     res = b.exact_space(("a", "cat", "plays", "with", "a", "dog"))
     correct_res = {("a", "cat", "plays", "with", "a", "dog"), ("cats", "play", "with", "a", "dog"),
                    ("a", "cat", "plays", "with", "dogs"), ("cats", "play", "with", "dogs")}
@@ -218,7 +235,7 @@ def word_test():
     print("word_test passed...")
 
 
-def word_interval_test():
+def word_interval_test(b, b1):
     ss = [("a", "cat", "plays", "with", "a", "dog"),
           ("today", "a", "cat", "plays", "with", "dogs", "in", "the", "room"),
           ("a", "cat", "plays", "with", "a", "dog"),
@@ -249,7 +266,3 @@ def word_interval_test():
             print("Imprecise for input: " + str(s))
 
     print("interval_word_test passed...")
-
-
-word_test()
-word_interval_test()
