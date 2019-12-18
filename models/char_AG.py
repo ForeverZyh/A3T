@@ -38,12 +38,17 @@ class char_AG:
                                                                       verbose=0, mode='auto',
                                                                       baseline=None, restore_best_weights=False)
         loss = Lambda(lambda x: categorical_crossentropy(x[0], x[1]))([self.y, self.logits])
-        layer = Gradient(loss)
-        partial = layer(look_up_c_d3)
-        self.partial_to_loss_model = Model(inputs=[self.c, self.y], outputs=partial)
+        # layer = Gradient(loss)
+        # partial = layer(look_up_c_d3)
+        # self.partial_to_loss_model = Model(inputs=[self.c, self.y], outputs=partial)
+        gradient = tf.gradients(loss, look_up_c_d3)[0]
+        self.sess = tf.Session()
+        self.sess.run(tf.global_variables_initializer())
 
         def lambda_partial(x, y):
-            return self.partial_to_loss_model.predict(x=[np.expand_dims(x, axis=0), np.expand_dims(y, axis=0)])[0]
+            # return self.partial_to_loss_model.predict(x=[np.expand_dims(x, axis=0), np.expand_dims(y, axis=0)])[0]
+            return \
+            self.sess.run(gradient, feed_dict={self.c: np.expand_dims(x, axis=0), self.y: np.expand_dims(y, axis=0)})[0]
 
         self.partial_to_loss = lambda_partial
 
@@ -110,13 +115,10 @@ def adv_train(saved_model_file, adv_model_file):
         arg_list = []
         for x, y in zip(batch_X, batch_Y):
             arg_list.append((chars.to_string(x), y, 3))
-
-        # rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 1)
-        # print(rets)
-        for arg in arg_list:
-            ret = a.beam_search_adversarial(*arg)
-            adv_batch_X.append(chars.to_ids(ret[0][0]))
-
+        rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
+        for ret in rets:
+            # print(ret[0])
+            adv_batch_X.append(chars.to_ids(ret[0]))
         return np.array(adv_batch_X)
 
     epochs = 30
@@ -132,6 +134,8 @@ def adv_train(saved_model_file, adv_model_file):
             batch_Y = training_Y[i:min(training_num, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]
             adv_batch_X = adv_batch(batch_X, batch_Y)
+            # print(model.model.evaluate(batch_X, batch_Y))
+            # print(model.model.evaluate(adv_batch_X, batch_Y))
             model.adv_model.train_on_batch(x=[batch_X, adv_batch_X], y=batch_Y)
 
         Alphabet.embedding = model.embed.get_weights()[0]

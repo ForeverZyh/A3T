@@ -1,6 +1,7 @@
 import re
 import itertools
 import numpy as np
+import multiprocessing.connection
 
 from utils import tuple_set_union, Beam
 from DSL.Alphabet import Alphabet
@@ -362,7 +363,11 @@ class Transformation:
         :return: the a list of adversarial examples within budget b
         '''
         inner_budget = b if self.inner_budget is None else self.inner_budget  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
-        partial_loss = Alphabet.partial_to_loss(Alphabet.toids(s), y_true)
+        if isinstance(y_true, multiprocessing.connection.Connection):
+            y_true.send(Alphabet.toids(s))
+            partial_loss = y_true.recv()
+        else:
+            partial_loss = Alphabet.partial_to_loss(Alphabet.toids(s), y_true)
         ret = {}
         if Alphabet.is_char_model:  # if character-level model
             ret[0] = [["", 0]]

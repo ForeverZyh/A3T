@@ -1,7 +1,6 @@
 import numpy as np
 import time
 import signal
-import tensorflow as tf
 
 from DSL.transformations import REGEX, Transformation, INS, tUnion, SWAP, SUB, DEL, Composition, Union
 from DSL.Alphabet import Alphabet
@@ -126,8 +125,7 @@ def convex_char_test(a):
 def throughput_test1(dl_sub):
     t = time.time()
     ans = Multiprocessing.mapping(dl_sub.beam_search_adversarial,
-                                  [(random_generator_300s(), None, 3) for _ in range(16)], 8)
-    print(ans)
+                                  [(random_generator_300s(), None, 3) for _ in range(56)], 8, Alphabet.partial_to_loss)
     print("throughput_test1 using " + str(time.time() - t) + "(s) time ...")
 
 
@@ -142,6 +140,7 @@ def throughput_test(a):
 
 class SimpleModel:
     def __init__(self):
+        import tensorflow as tf
         self.embedding_dim = 2
         self.x = tf.placeholder(dtype=tf.int32, shape=[None, Alphabet.max_len])
         self.y = tf.placeholder(dtype=tf.float32, shape=[None, 3])
@@ -169,6 +168,10 @@ def beam_search_adversarial_test(a, t12, t3, t4):
     y = np.array([0, 1, 0])
     beams = a.beam_search_adversarial(s, y, budget)
     print(beams)
+    ans = Multiprocessing.mapping(a.beam_search_adversarial,
+                                  [(s, y, 3) for _ in range(16)], 8, Alphabet.partial_to_loss)
+    for aans in ans:
+        assert tuple(aans) == tuple(beams[0])
     outputs = a.exact_space(s)
     for output, score in beams:
         assert output in outputs
