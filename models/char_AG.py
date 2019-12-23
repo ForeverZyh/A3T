@@ -21,7 +21,7 @@ class char_AG:
         self.embed = Embedding(self.all_voc_size, self.D, name="embedding")
         look_up_c_d3 = self.embed(self.c)
         look_up_c = Lambda(lambda x: K.expand_dims(x, -1))(look_up_c_d3)
-        self.conv2d = Conv2D(64, 10)
+        self.conv2d = Conv2D(64, 10, activation="relu")
         x = self.conv2d(look_up_c)
         self.maxpooling = MaxPooling2D(10)
         x = self.maxpooling(x)
@@ -62,9 +62,15 @@ class char_AG:
         x = self.fc1(x)
         x = self.fc2(x)
         self.adv_logits = self.fc3(x)
-        self.weighted_logits = Lambda(lambda x: x[0] * 0.5 + x[1] * 0.5)([self.adv_logits, self.logits])
-        self.adv_model = Model(inputs=[self.c, self.adv], outputs=self.weighted_logits)
-        self.adv_model.compile(optimizer='RMSprop', loss='categorical_crossentropy', metrics=['accuracy'])
+        # self.adv_model = Model(inputs=[self.c, self.adv], outputs=[self.adv_logits, self.logits])
+        loss_layer = Lambda(lambda x: K.mean(categorical_crossentropy(self.y, x[0]) * 0.5 + categorical_crossentropy(self.y, x[1]) * 0.5))
+        loss = loss_layer([self.adv_logits, self.logits])
+        self.adv_model = Model(inputs=[self.c, self.adv, self.y], outputs=[loss])
+        self.adv_model.add_loss(loss)
+        def fn(y_true, y_pred):
+            return categorical_crossentropy(y_true[0], y_pred[0]) * 0.5 + categorical_crossentropy(y_true[0], y_pred[1]) * 0.5        
+
+        self.adv_model.compile(optimizer='RMSprop', loss=[None], loss_weights=[None])
 
 
 def train(filname):
@@ -93,7 +99,7 @@ def adv_train(saved_model_file, adv_model_file):
     training_num = len(training_X)
 
     model = char_AG()
-    model.model.load_weights("./tmp/%s" % saved_model_file)
+    # model.model.load_weights("./tmp/%s" % saved_model_file)
 
     model.adversarial_training()
     Alphabet.set_char_model()
@@ -107,14 +113,14 @@ def adv_train(saved_model_file, adv_model_file):
     sub = Transformation(keep_same,
                          SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
                          keep_same)
-    # a = Composition(sub, sub)
-    a = sub
+    a = Composition(sub, sub, sub)
+    # a = sub
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
         arg_list = []
         for x, y in zip(batch_X, batch_Y):
-            arg_list.append((chars.to_string(x), y, 3))
+            arg_list.append((chars.to_string(x), y, 1))
         rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
         for ret in rets:
             # print(ret[0])
@@ -126,22 +132,26 @@ def adv_train(saved_model_file, adv_model_file):
     pre_loss = 1e20
     patience = 5
     waiting = 0
+    held_out = 1000
     for epoch in range(epochs):
         print("epoch %d:" % epoch)
-        for i in range(0, training_num, batch_size):
-            print(f'\radversarial training at %d/%d' % (i, training_num), flush=True)
-            batch_X = training_X[i:min(training_num, i + batch_size)]
-            batch_Y = training_Y[i:min(training_num, i + batch_size)]
+        for i in range(0, training_num - held_out, batch_size):
+            if i % 100 == 0: print(f'\radversarial training at %d/%d' % (i, training_num), flush=True)
+            batch_X = training_X[i:min(training_num - held_out, i + batch_size)]
+            batch_Y = training_Y[i:min(training_num - held_out, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]
             adv_batch_X = adv_batch(batch_X, batch_Y)
             # print(model.model.evaluate(batch_X, batch_Y))
             # print(model.model.evaluate(adv_batch_X, batch_Y))
-            model.adv_model.train_on_batch(x=[batch_X, adv_batch_X], y=batch_Y)
+            # print(model.adv_model.evaluate(x=[batch_X, adv_batch_X, batch_Y], y=[]))
+            model.adv_model.train_on_batch(x=[batch_X, adv_batch_X, batch_Y], y=[])
 
         Alphabet.embedding = model.embed.get_weights()[0]
-        adv_batch_X = adv_batch(training_X[:500], training_Y[:500])
-        loss, acc = model.adv_model.evaluate(x=[training_X[:500], adv_batch_X], y=training_Y[:500], batch_size=64)
-        print("adv loss: %.2f\t adv acc: %.2f" % (loss, acc))
+        adv_batch_X = adv_batch(training_X[:held_out], training_Y[:held_out])
+        loss = model.adv_model.evaluate(x=[training_X[:held_out], adv_batch_X, training_Y[:held_out]], y=[], batch_size=64)
+        print("adv loss: %.2f" % loss)
+        normal_loss, normal_acc = model.model.evaluate(x=test_X, y=test_Y, batch_size=64)
+        print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
         if loss > pre_loss:
             waiting += 1
             if waiting > patience:
@@ -150,7 +160,7 @@ def adv_train(saved_model_file, adv_model_file):
             waiting = 0
             pre_loss = loss
 
-    model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
+        model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epochs))
 
 
 def test_model(saved_model_file):
@@ -165,8 +175,8 @@ def test_model(saved_model_file):
 
     model = char_AG()
     model.model.load_weights("./tmp/%s" % saved_model_file)
-    # normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
-    # print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
+    normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
     dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
     Alphabet.set_char_model()
     Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
