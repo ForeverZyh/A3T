@@ -30,7 +30,10 @@ def do_test():
     dl_sub = Composition(sub_single, sub_single, sub_single)
 
     a = Composition(t12, t3, t4)  # first delete then swap then (insert or substitute)
-    a_untouched = Composition(Union(t12, untouched), Union(t3, untouched), Union(t4, untouched))
+    t12_untouched = Union(t12, untouched)
+    t3_untouched = Union(t3, untouched)
+    t4_untouched = Union(t4, untouched)
+    a_untouched = Composition(t12_untouched, t3_untouched, t4_untouched)
     random_sample_test(a_untouched)
 
     char_test(a)
@@ -38,7 +41,7 @@ def do_test():
     convex_char_test(a)
     throughput_test(a)
     throughput_test1(dl_sub)
-    beam_search_adversarial_test(a, t12, t3, t4)
+    beam_search_adversarial_test(a_untouched, t12_untouched, t3_untouched, t4_untouched)
 
     Alphabet.set_word_model()
     dict_map = {}
