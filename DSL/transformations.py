@@ -3,7 +3,7 @@ import itertools
 import numpy as np
 import multiprocessing.connection
 
-from utils import tuple_set_union, Beam
+from utils import tuple_set_union, Beam, UnorderedBeam
 from DSL.Alphabet import Alphabet
 
 
@@ -42,6 +42,18 @@ class INS:
 
         return {input_pos: ret.check_balance()}
 
+    def random_sample(self, s, output, input_pos, b):
+        assert b > 0
+        ret = UnorderedBeam(b)
+        for c in self.alphabet_acc:
+            if Alphabet.is_char_model:  # if character-level model
+                new_output = output + c
+            else:  # if word-level model
+                new_output = output + (c,)
+            ret.add(new_output)
+
+        return {input_pos: ret.check_balance()}
+
 
 class DEL:
     def __init__(self, phi):
@@ -73,6 +85,13 @@ class DEL:
             else:
                 score = 0
             return {input_pos + 1: [[output, score]]}
+        else:
+            return {}
+
+    def random_sample(self, s, output, input_pos, b):
+        assert b > 0
+        if input_pos < len(s) and self.phi(s[input_pos]):
+            return {input_pos + 1: [output]}
         else:
             return {}
 
@@ -141,6 +160,26 @@ class REGEX:
 
         return ret
 
+    def random_sample(self, s, output, input_pos, b, is_end=False):
+        assert b > 0
+        ret = {}
+        new_output = output
+        for i in range(input_pos, len(s) + 1):
+            if i > input_pos:
+                if Alphabet.is_char_model:  # if character-level model
+                    new_output += s[i - 1]
+                else:
+                    new_output += (s[i - 1],)
+            if not is_end or (is_end and i == len(s)):
+                if Alphabet.is_char_model:  # if character-level model
+                    if self.is_any or self.regex.fullmatch(s[:i]):
+                        ret[i] = [new_output]
+                else:  # if word-level model
+                    if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
+                        ret[i] = [new_output]
+
+        return ret
+
 
 class SWAP:
     def __init__(self, phi1, phi2):
@@ -182,6 +221,17 @@ class SWAP:
         else:
             return {}
 
+    def random_sample(self, s, output, input_pos, b):
+        assert b > 0
+        if input_pos + 1 < len(s) and self.phi[0](s[input_pos]) and self.phi[1](s[input_pos + 1]):
+            if Alphabet.is_char_model:  # if character-level model
+                new_output = output + s[input_pos + 1] + s[input_pos]
+            else:
+                new_output = output + (s[input_pos + 1], s[input_pos],)
+            return {input_pos + 2: [new_output]}
+        else:
+            return {}
+
 
 class SUB:
     def __init__(self, phi, fun):
@@ -213,6 +263,7 @@ class SUB:
         return {} if len(ret) == 0 else {1: (ret,)}
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        assert b > 0
         if input_pos < len(s) and self.phi(s[input_pos]):
             ret = Beam(1)
             tmp_ret = self.fun(s[input_pos])
@@ -225,6 +276,21 @@ class SUB:
                 score = np.sum(
                     partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
                 ret.add(new_output, score)
+            return {input_pos + 1: ret.check_balance()}
+        else:
+            return {}
+
+    def random_sample(self, s, output, input_pos, b):
+        assert b > 0
+        if input_pos < len(s) and self.phi(s[input_pos]):
+            ret = UnorderedBeam(1)
+            tmp_ret = self.fun(s[input_pos])
+            for ss in tmp_ret:
+                if Alphabet.is_char_model:  # if character-level model
+                    new_output = output + ss
+                else:
+                    new_output = output + (ss,)
+                ret.add(new_output)
             return {input_pos + 1: ret.check_balance()}
         else:
             return {}
@@ -272,6 +338,19 @@ class tUnion:
             for pos in tmp_ret:
                 if pos not in ret:
                     ret[pos] = Beam(b)
+                ret[pos].extend(tmp_ret[pos])
+
+        for pos in ret:
+            ret[pos] = ret[pos].check_balance()
+        return ret
+
+    def random_sample(self, s, output, input_pos, b):
+        ret = {}
+        for t in self.t:
+            tmp_ret = t.random_sample(s, output, input_pos, b)
+            for pos in tmp_ret:
+                if pos not in ret:
+                    ret[pos] = UnorderedBeam(b)
                 ret[pos].extend(tmp_ret[pos])
 
         for pos in ret:
@@ -394,15 +473,48 @@ class Transformation:
                 new_ret[pos] = new_ret[pos].check_balance()
             ret = new_ret
 
+        true_ret = Beam(b)
+        true_ret.add(s, 0)
         if len(s) in ret:
-            true_ret = Beam(b)
             for data, score in ret[len(s)]:
                 for i in range(len(data), len(s)):
                     score += np.sum(partial_loss[i] * (Alphabet.mapping[Alphabet.padding] - Alphabet.mapping[s[i]]))
                 true_ret.add(data, score)
-            return true_ret.check_balance()
-        else:
-            return []
+
+        return true_ret.check_balance()
+
+    def random_sample(self, s, b):
+        inner_budget = b if self.inner_budget is None else self.inner_budget  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
+        ret = {}
+        if Alphabet.is_char_model:  # if character-level model
+            ret[0] = [""]
+        else:  # if word-level model
+            ret[0] = [()]
+        for (i_seq, t) in enumerate(self.seq):
+            new_ret = {}
+            for pos in ret:
+                for output in ret[pos]:
+                    if isinstance(t, REGEX):
+                        tmp_res = t.random_sample(s, output, pos, inner_budget, i_seq + 1 == len(self.seq))
+                    else:
+                        tmp_res = t.random_sample(s, output, pos, inner_budget)
+                    for new_pos in tmp_res:
+                        if new_pos not in new_ret:
+                            new_ret[new_pos] = UnorderedBeam(inner_budget)
+                        for new_output in tmp_res[new_pos]:  # the new output for all previous unit transformation
+                            new_ret[new_pos].add(new_output)
+
+            for pos in new_ret:
+                new_ret[pos] = new_ret[pos].check_balance()
+            ret = new_ret
+
+        true_ret = UnorderedBeam(b)
+        true_ret.add(s)
+        if len(s) in ret:
+            for data in ret[len(s)]:
+                true_ret.add(data)
+
+        return true_ret.check_balance()
 
 
 class Union:
@@ -436,6 +548,12 @@ class Union:
         ret = Beam(b)
         for p in self.p:
             ret.extend(p.beam_search_adversarial(s, y_true, b))
+        return ret.check_balance()
+
+    def random_sample(self, s, b):
+        ret = UnorderedBeam(b)
+        for p in self.p:
+            ret.extend(p.random_sample(s, b))
         return ret.check_balance()
 
 
@@ -481,6 +599,16 @@ class Composition:
             new_ret = Beam(b)
             for s, score in ret:
                 new_ret.extend([[x, y + score] for (x, y) in p.beam_search_adversarial(s, y_true, b)])
+            ret = new_ret.check_balance()
+
+        return ret
+
+    def random_sample(self, s, b):
+        ret = [s]
+        for p in reversed(self.p):
+            new_ret = UnorderedBeam(b)
+            for s in ret:
+                new_ret.extend(p.random_sample(s, b))
             ret = new_ret.check_balance()
 
         return ret

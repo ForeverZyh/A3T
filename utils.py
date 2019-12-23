@@ -43,6 +43,38 @@ class Multiprocessing:
         return ans
 
 
+class MultiprocessingWithoutPipe:
+    @staticmethod
+    def work(fun, num, q, args):
+        np.random.seed(num)
+        ret = fun(*args)
+        q.put((num, ret))
+
+    @staticmethod
+    def mapping(fun, args_list, processes):
+        ans = [None] * len(args_list)
+        q = SimpleQueue()
+        for batch_start in range(0, len(args_list), processes):
+            ps = []
+            for i in range(batch_start, min(batch_start + processes, len(args_list))):
+                p = Process(target=MultiprocessingWithoutPipe.work, args=(fun, i, q, args_list[i]))
+                p.start()
+                ps.append(p)
+
+            while not q.empty():
+                num, ret = q.get()
+                ans[num] = ret
+
+            for p in ps:
+                p.join()
+
+        while not q.empty():
+            num, ret = q.get()
+            ans[num] = ret
+
+        return ans
+
+
 class Gradient(keras.layers.Layer):
     def __init__(self, y, **kwargs):
         super(Gradient, self).__init__(**kwargs)
@@ -140,6 +172,30 @@ class Beam:
                 return False
 
         return True
+
+
+class UnorderedBeam:
+    def __init__(self, budget):
+        self.budget = budget
+        self.queue = []
+
+    def add(self, data):
+        self.queue.append(data)
+
+    def extend(self, others):
+        if isinstance(others, list):
+            self.queue.extend(others)
+        else:
+            assert False
+            # for data, score in others.queue:
+            #     self.add(data, score)
+
+    def check_balance(self):
+        ids = np.random.randint(0, len(self.queue), self.budget)
+        ret = []
+        for id in ids:
+            ret.append(self.queue[id])
+        return ret
 
 
 class Dict:
