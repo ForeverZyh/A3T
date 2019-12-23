@@ -4,7 +4,7 @@ import signal
 
 from DSL.transformations import REGEX, Transformation, INS, tUnion, SWAP, SUB, DEL, Composition, Union
 from DSL.Alphabet import Alphabet
-from utils import tuple_set_union, Beam, Multiprocessing
+from utils import tuple_set_union, Beam, Multiprocessing, MultiprocessingWithoutPipe
 
 
 def do_test():
@@ -30,13 +30,18 @@ def do_test():
     dl_sub = Composition(sub_single, sub_single, sub_single)
 
     a = Composition(t12, t3, t4)  # first delete then swap then (insert or substitute)
+    t12_untouched = Union(t12, untouched)
+    t3_untouched = Union(t3, untouched)
+    t4_untouched = Union(t4, untouched)
+    a_untouched = Composition(t12_untouched, t3_untouched, t4_untouched)
+    random_sample_test(a_untouched)
 
     char_test(a)
     interval_char_test(a)
     convex_char_test(a)
     throughput_test(a)
     throughput_test1(dl_sub)
-    beam_search_adversarial_test(a, t12, t3, t4)
+    beam_search_adversarial_test(a_untouched, t12_untouched, t3_untouched, t4_untouched)
 
     Alphabet.set_word_model()
     dict_map = {}
@@ -62,6 +67,22 @@ def do_test():
 
     word_test(b, b1)
     word_interval_test(b, b1)
+
+
+def random_sample_test(a):
+    res = set(a.exact_space("abcsabb"))
+    res_dict = {}
+    for s in res:
+        res_dict[s] = len(res_dict)
+    dist = np.zeros(len(res))
+    times = 1000
+    rets = MultiprocessingWithoutPipe.mapping(a.random_sample, [("abcsabb", 5) for _ in range(times)], 8)
+    for random_res in rets:
+        for s in random_res:
+            assert s in res
+            dist[res_dict[s]] += 1
+    print(dist * 1.0 / times)
+    print("random_sample_test passed...")
 
 
 def char_test(a):
@@ -125,7 +146,7 @@ def convex_char_test(a):
 def throughput_test1(dl_sub):
     t = time.time()
     ans = Multiprocessing.mapping(dl_sub.beam_search_adversarial,
-                                  [(random_generator_300s(), None, 3) for _ in range(56)], 8, Alphabet.partial_to_loss)
+                                  [(random_generator_300s(), None, 3) for _ in range(16)], 8, Alphabet.partial_to_loss)
     print("throughput_test1 using " + str(time.time() - t) + "(s) time ...")
 
 
