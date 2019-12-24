@@ -25,20 +25,36 @@ def do_test():
     t3 = Transformation(regex2, SWAP(lambda c: True, lambda c: True), regex1)  # swap two adjacent after a leading 'a'
     t4 = Transformation(regex1, DEL(lambda c: c == 'b'), regex1)  # delete 'b' at any place
     t12 = Union(t1, t2)
-    ssub = SUB(lambda c: c != ' ', lambda c: set([chr(97 + i) for i in range(26)]))
+    ssub = SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c])
     sub_single = Transformation(regex1, ssub, regex1)
     dl_sub = Composition(sub_single, sub_single, sub_single)
-
     a = Composition(t12, t3, t4)  # first delete then swap then (insert or substitute)
     t12_untouched = Union(t12, untouched)
     t3_untouched = Union(t3, untouched)
     t4_untouched = Union(t4, untouched)
     a_untouched = Composition(t12_untouched, t3_untouched, t4_untouched)
 
-    random_sample_test(a_untouched)
-    char_test(a)
-    interval_char_test(a)
-    convex_char_test(a)
+    def get_max_delta_test0():
+        assert t1.get_max_delta() == [1, 1]
+        assert t2.get_max_delta() == [0, 1]
+        assert t3.get_max_delta() == [0, 2]
+        assert t4.get_max_delta() == [1, 0]
+        assert untouched.get_max_delta() == [0, 0]
+        assert t12.get_max_delta() == [1, 1]
+        assert sub_single.get_max_delta() == [0, 1]
+        assert dl_sub.get_max_delta() == [0, 3]
+        assert a.get_max_delta() == [1, 0]
+        assert t12_untouched.get_max_delta() == [1, 1]
+        assert t3_untouched.get_max_delta() == [0, 2]
+        assert t4.get_max_delta() == [1, 0]
+        assert a_untouched.get_max_delta() == [1, 0]
+        print("get_max_delta_test0 passed...")
+
+    get_max_delta_test0()
+
+    # random_sample_test(a_untouched)
+    # char_test(a)
+    interval_convex_char_test(a, dl_sub)
     throughput_test(a)
     throughput_test1(dl_sub)
     beam_search_adversarial_test(a_untouched, t12_untouched, t3_untouched, t4_untouched)
@@ -62,11 +78,25 @@ def do_test():
     same = Transformation(regex1)
     sub_b = Union(single2plural, plural2single, same)
     b = Composition(Union(verbplural, verbsingle), sub_b, sub_b)
-    sub_b1 = Union(dogcat, dogcat, same)
+    sub_b1 = Union(dogcat, same)
     b1 = Composition(sub_b1, sub_b1, b)
 
+    def get_max_delta_test1():
+        assert single2plural.get_max_delta() == [1, 0]
+        assert plural2single.get_max_delta() == [1, 1]
+        assert verbsingle.get_max_delta() == [0, 1]
+        assert verbplural.get_max_delta() == [0, 1]
+        assert dogcat.get_max_delta() == [0, 1]
+        assert same.get_max_delta() == [0, 0]
+        assert sub_b.get_max_delta() == [1, 1]
+        assert b.get_max_delta() == [1, 2]
+        assert sub_b1.get_max_delta() == [0, 1]
+        assert b1.get_max_delta() == [1, 2]
+        print("get_max_delta_test1 passed...")
+
+    get_max_delta_test1()
     word_test(b, b1)
-    word_interval_test(b, b1)
+    word_interval_test(b, b1, dogcat)
 
 
 def random_sample_test(a):
@@ -99,9 +129,9 @@ def char_test(a):
     '''
 
 
-def random_generator_300s():
+def random_generator(length):
     s = ""
-    for i in range(300):
+    for i in range(length):
         s += chr(np.random.randint(0, 26) + 97)
         if np.random.rand() < 0.2:
             s += " "
@@ -110,6 +140,10 @@ def random_generator_300s():
 
 def is_precise(res, precise_res):
     merged_res = tuple_set_union(precise_res, res)
+    if res is None:
+        assert precise_res is None
+        return True
+
     assert len(res) == len(merged_res)
     for x, y in zip(res, merged_res):
         assert len(set(x).symmetric_difference(set(y))) == 0
@@ -120,40 +154,44 @@ def is_precise(res, precise_res):
     return True
 
 
-def interval_char_test(a):
-    ss = ['abcsabb'] + [random_generator_300s() for _ in range(0)]
+def interval_convex_char_test(a, dl_sub):
+    ss = ['abcsabb'] + ["a" + random_generator(20) for _ in range(5)]
     for s in ss:
         res = a.interval_space(tuple([(t,) for t in s]))
-        precise_res = Alphabet.to_interval_space(a.exact_space(s))
-        if is_precise(res, precise_res):
+        max_delta = a.get_max_delta()
+        compute_delta = max_delta[0] * len(s) + max_delta[1]
+        precise_res, precise_delta = Alphabet.to_convex_hull(a.exact_space(s), s)
+        assert compute_delta >= precise_delta
+        if is_precise(res, precise_res) and compute_delta == precise_delta:
             print("Precise for input: " + s)
         else:
+            print(res, compute_delta)
+            print(precise_res, precise_delta)
             print("Imprecise for input: " + s)
 
-    print("interval_char_test passed...")
-
-
-def convex_char_test(a):
-    ss = ['abcsabb'] + [random_generator_300s() for _ in range(0)]
+    ss = [random_generator(10) for _ in range(5)]
     for s in ss:
-        precise_res = a.exact_space(s)
-        convex = Alphabet.to_convex_hull(precise_res, s)
-        print(convex[1])
+        res = dl_sub.interval_space(tuple([(t,) for t in s]))
+        max_delta = dl_sub.get_max_delta()
+        compute_delta = max_delta[0] * len(s) + max_delta[1]
+        precise_res, precise_delta = Alphabet.to_convex_hull(dl_sub.exact_space(s), s)
+        # substitution should be precise
+        assert is_precise(res, precise_res) and compute_delta == precise_delta
 
-    print("convex_char_test passed...")
+    print("interval_convex_char_test passed...")
 
 
 def throughput_test1(dl_sub):
     t = time.time()
     ans = Multiprocessing.mapping(dl_sub.beam_search_adversarial,
-                                  [(random_generator_300s(), None, 3) for _ in range(16)], 8, Alphabet.partial_to_loss)
+                                  [(random_generator(300), None, 3) for _ in range(16)], 8, Alphabet.partial_to_loss)
     print("throughput_test1 using " + str(time.time() - t) + "(s) time ...")
 
 
 def throughput_test(a):
     t = time.process_time()
     for _ in range(5):
-        s = "a" + random_generator_300s()
+        s = "a" + random_generator(300)
         a.exact_space(s)
 
     print("throughput_test using " + str(time.process_time() - t) + "(s) time ...")
@@ -247,7 +285,7 @@ def word_test(b, b1):
     print("word_test passed...")
 
 
-def word_interval_test(b, b1):
+def word_interval_test(b, b1, dogcat):
     ss = [("a", "cat", "plays", "with", "a", "dog"),
           ("today", "a", "cat", "plays", "with", "dogs", "in", "the", "room"),
           ("a", "cat", "plays", "with", "a", "dog"),
@@ -269,12 +307,34 @@ def word_interval_test(b, b1):
             print(str(exc) + str(s))
             continue
 
-        precise_res = Alphabet.to_interval_space(x.exact_space(s_))
-        print(res)
-        print(precise_res)
-        if is_precise(res, precise_res):
+        precise_res, precise_delta = Alphabet.to_convex_hull(x.exact_space(s_), s_)
+        max_delta = x.get_max_delta()
+        compute_delta = max_delta[0] * len(s) + max_delta[1]
+        assert compute_delta >= precise_delta
+        if is_precise(res, precise_res) and compute_delta == precise_delta:
             print("Precise for input: " + str(s))
         else:
+            print(res, compute_delta)
+            print(precise_res, precise_delta)
             print("Imprecise for input: " + str(s))
 
+    for s_ in ss:
+        s = [(t,) for t in s_]
+
+        def handler(signum, frame):
+            raise Exception("Time out for input: ")
+
+        signal.signal(signal.SIGALRM, handler)
+        signal.alarm(10)
+        try:
+            res = dogcat.interval_space(tuple(s))
+        except Exception as exc:
+            print(str(exc) + str(s))
+            continue
+
+        precise_res, precise_delta = Alphabet.to_convex_hull(dogcat.exact_space(s_), s_)
+        max_delta = dogcat.get_max_delta()
+        compute_delta = max_delta[0] * len(s) + max_delta[1]
+        assert is_precise(res, precise_res) and compute_delta == precise_delta
+        
     print("interval_word_test passed...")

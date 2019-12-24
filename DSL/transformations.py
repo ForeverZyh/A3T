@@ -311,7 +311,26 @@ class SUB:
 class tUnion:
     def __init__(self, *arg):
         self.t = arg
+        # whether the tUnion has certain type of local transformations
+        self.has_swap = False
+        self.has_ins = False
+        self.has_del = False
+        self.has_sub = False
         for x in self.t:
+            if isinstance(x, SWAP):
+                self.has_swap = True
+            elif isinstance(x, INS):
+                self.has_ins = True
+            elif isinstance(x, DEL):
+                self.has_del = True
+            elif isinstance(x, SUB):
+                self.has_sub = True
+            elif isinstance(x, tUnion):
+                self.has_swap |= x.has_swap
+                self.has_ins |= x.has_ins
+                self.has_del |= x.has_del
+                self.has_sub |= x.has_sub
+
             assert isinstance(x, REGEX) or isinstance(x, DEL) or isinstance(x, INS) or isinstance(x, SWAP) \
                    or isinstance(x, SUB) or isinstance(x, tUnion)
 
@@ -375,6 +394,9 @@ class Transformation:
         self.seq = arg
         self.cache_exact = {}
         self.cache_interval = {}
+        self.delta = None
+        self.max_delta = None
+        self.max_increment = None
         if "inner_budget" in kwargs:
             self.inner_budget = kwargs["inner_budget"]
         else:
@@ -528,6 +550,36 @@ class Transformation:
 
         return true_ret.check_balance()
 
+    def get_delta(self):
+        if self.delta is None:
+            self.delta = 0
+            # we only compute the delta regarding to substitution and swap.
+            for t in self.seq:
+                if isinstance(t, SUB) or (isinstance(t, tUnion) and t.has_sub):
+                    self.delta += 1
+                elif isinstance(t, SWAP) or (isinstance(t, tUnion) and t.has_swap):
+                    self.delta += 2
+
+        return self.delta
+
+    def get_max_increment(self):
+        if self.max_increment is None:
+            self.max_increment = [False, 0]
+            for t in self.seq:
+                if isinstance(t, INS) or (isinstance(t, tUnion) and t.has_ins):
+                    self.max_increment[0] = True
+                    self.max_increment[1] += 1
+                elif isinstance(t, DEL) or (isinstance(t, tUnion) and t.has_del):
+                    # Notice this elif instead if: we first consider insertion in the tUnion since we want to compute
+                    # the max increment
+                    self.max_increment[0] = True
+                    self.max_increment[1] -= 1
+
+        return self.max_increment
+
+    def get_max_delta(self):
+        return get_max_delta(self)
+
 
 class Union:
     def __init__(self, *args):
@@ -535,6 +587,9 @@ class Union:
         assert len(args) > 0
         self.cache_exact = {}
         self.cache_interval = {}
+        self.delta = None
+        self.max_delta = None
+        self.max_increment = None
         for p in self.p:
             assert isinstance(p, Transformation) or isinstance(p, Union) or isinstance(p, Composition)
 
@@ -568,6 +623,33 @@ class Union:
             ret.extend(p.random_sample(s, b))
         return ret.check_balance()
 
+    def get_delta(self):
+        if self.delta is None:
+            self.delta = 0
+            # the max delta of union is the max of them,
+            # e.g., S1-> delta=2 ->S2; S1-> delta=1 ->S2, then S1-> delta=max(2,1)=2 -> S2.
+            for p in self.p:
+                self.delta = max(p.get_delta(), self.delta)
+
+        return self.delta
+
+    def get_max_increment(self):
+        if self.max_increment is None:
+            self.max_increment = [False, 0]
+            for p in self.p:
+                has_ins_delta, max_increment = p.get_max_increment()
+                # we get the maximum of increment in Union
+                if has_ins_delta:
+                    if self.max_increment[0]:
+                        self.max_increment[1] = max(max_increment, self.max_increment[1])
+                    else:
+                        self.max_increment = [has_ins_delta, max_increment]
+
+        return self.max_increment
+
+    def get_max_delta(self):
+        return get_max_delta(self)
+
 
 class Composition:
     def __init__(self, *args):
@@ -575,6 +657,9 @@ class Composition:
         assert len(args) > 0
         self.cache_exact = {}
         self.cache_interval = {}
+        self.delta = None
+        self.max_delta = None
+        self.max_increment = None
         for p in self.p:
             assert isinstance(p, Transformation) or isinstance(p, Union) or isinstance(p, Composition)
 
@@ -595,6 +680,8 @@ class Composition:
             return self.cache_interval[s]
         ret = s
         for p in reversed(self.p):
+            if ret is None:
+                break
             ret = p.interval_space(ret)
         self.cache_interval[s] = ret
         return ret
@@ -604,7 +691,7 @@ class Composition:
         Beam search for adversarial examples within budget b.
         :param s: the input s
         :param b: the budget b
-        :return: the
+        :return: the a list of adversarial examples within budget b
         '''
         ret = [[s, 0]]
         for p in reversed(self.p):
@@ -624,3 +711,57 @@ class Composition:
             ret = new_ret.check_balance()
 
         return ret
+
+    def get_delta(self):
+        if self.delta is None:
+            self.delta = 0
+            # the delta of composition is added together,
+            # e.g., S1-> delta=2 ->S2; S2-> delta=1 ->S3, then S1-> delta=2+1=3 -> S3.
+            for p in reversed(self.p):
+                self.delta += p.get_delta()
+
+        return self.delta
+
+    def get_max_increment(self):
+        '''
+        Get the maximum increment of the output after the transformation
+        :return: [has_ins_delta: Bool, max_increment: int]
+        has_ins_delta indicates whether the transformation contains insertions or deletions
+        max_increment is the maximum increment of the output after the transformation
+        '''
+        if self.max_increment is None:
+            self.max_increment = [False, 0]
+            for p in reversed(self.p):
+                has_ins_delta, max_increment = p.get_max_increment()
+                if has_ins_delta:
+                    self.max_increment[0] = True
+                    # the increment is adding together in Composition
+                    self.max_increment[1] += max_increment
+
+        return self.max_increment
+
+    def get_max_delta(self):
+        return get_max_delta(self)
+
+
+def get_max_delta(self):
+    '''
+    Get the maximum delta of a transformation
+    :return: [is_max_len, delta],
+        is_max_len: is an 0/1 integer indicating whether the max_delta is related to the length of the input without
+        padding (len_wo_padding).
+        delta: is the size of perturbation regarding to either with/without len_wo_padding.
+        The max_delta can be calculated as is_max_len*len_wo_padding + delta.
+        if the transformation only has one deletion, then (is_max_len, delta)=(1, 0);
+        if the transformation only has one insertion, then (is_max_len, delta)=(1, 1);
+    '''
+    if self.max_delta is None:
+        # We first compute the maximum increment of length of the output without padding.
+        # The key is to count #ins-#del.
+        has_ins_del, max_increment = self.get_max_increment()
+        if has_ins_del:
+            self.max_delta = [1, max(max_increment, 0)]
+        else:
+            self.max_delta = [0, self.get_delta()]
+
+    return self.max_delta
