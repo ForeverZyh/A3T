@@ -59,9 +59,10 @@ class DEL:
     def __init__(self, phi):
         self.phi = phi
         self.alphabet_acc = Alphabet.get_acc_alphabet(self.phi)
+        self.alphabet_acc_set = set(self.alphabet_acc)
 
     def exact_space(self, s):
-        if len(s) > 0 and self.phi(s[0]):
+        if len(s) > 0 and s[0] in self.alphabet_acc_set:
             if Alphabet.is_char_model:  # if character-level model
                 return {(1, "")}
             else:  # if word-level model
@@ -77,7 +78,7 @@ class DEL:
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
-        if input_pos < len(s) and self.phi(s[input_pos]):
+        if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
             end_pos = min(len(output) - 1, input_pos)
             if end_pos == input_pos:
                 score = np.sum(
@@ -90,7 +91,7 @@ class DEL:
 
     def random_sample(self, s, output, input_pos, b):
         assert b > 0
-        if input_pos < len(s) and self.phi(s[input_pos]):
+        if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
             return {input_pos + 1: [output]}
         else:
             return {}
@@ -119,19 +120,27 @@ class REGEX:
         return ret
 
     def interval_space(self, s, is_end=False):
-        # TODO figure out a more efficient way to do this. One optimization maybe use DFA so that some prefix can be eliminated at early stage. However, it is still exponential.
+        # TODO figure out a more efficient way to do this.
+        #  One optimization maybe use DFA so that some prefix can be eliminated at early stage, and the exponential
+        #  enumeration will be merged by their quotients (mapping to the same state on the DFA).
+        #  Then the exponential enumeration becomes polynomial of #state of the DFA.
+        #  Currently we only optimized the ".*".
         if (s, is_end) in self.cache_interval:
             return self.cache_interval[(s, is_end)]
         ret = {}
         for i in range(len(s) + 1):
             if not is_end or (is_end and (i == len(s) or "" in s[i])):
-                for s_tuple in itertools.product(*(s[:i])):
-                    if self.is_any or (Alphabet.is_char_model and self.regex.fullmatch("".join(s_tuple))) or (
-                            not Alphabet.is_char_model and self.regex.fullmatch(Alphabet.escaped_char.join(s_tuple))):
-                        if i not in ret:
-                            ret[i] = tuple([(t,) for t in s_tuple])
-                        else:
-                            ret[i] = tuple_set_union(ret[i], tuple([(t,) for t in s_tuple]))
+                if not self.is_any:
+                    for s_tuple in itertools.product(*(s[:i])):
+                        if (Alphabet.is_char_model and self.regex.fullmatch("".join(s_tuple))) or (
+                                not Alphabet.is_char_model and self.regex.fullmatch(
+                            Alphabet.escaped_char.join(s_tuple))):
+                            if i not in ret:
+                                ret[i] = tuple([(t,) for t in s_tuple])
+                            else:
+                                ret[i] = tuple_set_union(ret[i], tuple([(t,) for t in s_tuple]))
+                else:
+                    ret[i] = s[:i]
 
         self.cache_interval[(s, is_end)] = ret
         return ret
@@ -186,9 +195,10 @@ class SWAP:
     def __init__(self, phi1, phi2):
         self.phi = [phi1, phi2]
         self.alphabet_acc = [Alphabet.get_acc_alphabet(phi) for phi in self.phi]
+        self.alphabet_acc_set = [set(t) for t in self.alphabet_acc]
 
     def exact_space(self, s):
-        if len(s) > 1 and self.phi[0](s[0]) and self.phi[1](s[1]):
+        if len(s) > 1 and s[0] in self.alphabet_acc_set[0] and s[1] in self.alphabet_acc_set[1]:
             if Alphabet.is_char_model:  # if character-level model
                 return {(2, s[1] + s[0])}
             else:  # if word-level model
@@ -200,15 +210,14 @@ class SWAP:
         ret = [(), ()]
         if len(s) > 0:
             for i in range(len(self.phi)):
-                for single_s in s[i]:
-                    if self.phi[i](single_s):
-                        ret[1 - i] += (single_s,)
+                ret[1 - i] = tuple(set(s[i]).intersection(self.alphabet_acc_set[i]))
 
         return {} if len(ret[0]) == 0 or len(ret[1]) == 0 else {2: tuple(ret)}
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
-        if input_pos + 1 < len(s) and self.phi[0](s[input_pos]) and self.phi[1](s[input_pos + 1]):
+        if input_pos + 1 < len(s) and s[input_pos] in self.alphabet_acc_set[0] and s[input_pos + 1] in \
+                self.alphabet_acc_set[1]:
             if Alphabet.is_char_model:  # if character-level model
                 new_output = output + s[input_pos + 1] + s[input_pos]
             else:
@@ -224,7 +233,8 @@ class SWAP:
 
     def random_sample(self, s, output, input_pos, b):
         assert b > 0
-        if input_pos + 1 < len(s) and self.phi[0](s[input_pos]) and self.phi[1](s[input_pos + 1]):
+        if input_pos + 1 < len(s) and s[input_pos] in self.alphabet_acc_set[0] and s[input_pos + 1] in \
+                self.alphabet_acc_set[1]:
             if Alphabet.is_char_model:  # if character-level model
                 new_output = output + s[input_pos + 1] + s[input_pos]
             else:
@@ -239,9 +249,10 @@ class SUB:
         self.phi = phi
         self.fun = fun
         self.alphabet_acc = Alphabet.get_acc_alphabet(self.phi)
+        self.alphabet_acc_set = set(self.alphabet_acc)
 
     def exact_space(self, s):
-        if len(s) > 0 and self.phi(s[0]):
+        if len(s) > 0 and s[0] in self.alphabet_acc_set:
             ret = set()
             tmp_ret = self.fun(s[0])
             for ss in tmp_ret:
@@ -254,18 +265,18 @@ class SUB:
             return set()
 
     def interval_space(self, s):
-        ret = ()
+        ret = set()
         if len(s) > 0:
             for single_s in s[0]:
-                if self.phi(single_s):
+                if single_s in self.alphabet_acc_set:
                     tmp_ret = self.fun(single_s)
-                    for ss in tmp_ret:
-                        ret += (ss,)
-        return {} if len(ret) == 0 else {1: (ret,)}
+                    ret.update(tmp_ret)
+
+        return {} if len(ret) == 0 else {1: (tuple(ret),)}
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
-        if input_pos < len(s) and self.phi(s[input_pos]):
+        if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
             ret = Beam(1)
             tmp_ret = self.fun(s[input_pos])
             for ss in tmp_ret:
@@ -283,7 +294,7 @@ class SUB:
 
     def random_sample(self, s, output, input_pos, b):
         assert b > 0
-        if input_pos < len(s) and self.phi(s[input_pos]):
+        if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
             ret = UnorderedBeam(1)
             tmp_ret = self.fun(s[input_pos])
             for ss in tmp_ret:

@@ -34,8 +34,8 @@ def do_test():
     t3_untouched = Union(t3, untouched)
     t4_untouched = Union(t4, untouched)
     a_untouched = Composition(t12_untouched, t3_untouched, t4_untouched)
-    random_sample_test(a_untouched)
 
+    random_sample_test(a_untouched)
     char_test(a)
     interval_char_test(a)
     convex_char_test(a)
@@ -196,18 +196,6 @@ def beam_search_adversarial_test(a, t12, t3, t4):
     outputs = a.exact_space(s)
     for output, score in beams:
         assert output in outputs
-
-    # check the correctness of beam search
-    ret1 = t4.beam_search_adversarial(s, y, budget)
-    ans = Beam(budget)
-    for s1, score1 in ret1:
-        ret2 = t3.beam_search_adversarial(s1, y, budget)
-        for s2, score2 in ret2:
-            ret3 = t12.beam_search_adversarial(s2, y, budget)
-            for s3, score3 in ret3:
-                ans.add(s3, score1 + score2 + score3)
-
-    assert ans.is_same(beams)
 
     worse = -1e20
     worse_output = ""
