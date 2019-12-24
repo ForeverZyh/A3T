@@ -190,7 +190,7 @@ def beam_search_adversarial_test(a, t12, t3, t4):
     beams = a.beam_search_adversarial(s, y, budget)
     print(beams)
     ans = Multiprocessing.mapping(a.beam_search_adversarial,
-                                  [(s, y, 3) for _ in range(16)], 8, Alphabet.partial_to_loss)
+                                  [(s, y, budget) for _ in range(16)], 8, Alphabet.partial_to_loss)
     for aans in ans:
         assert tuple(aans) == tuple(beams[0])
     outputs = a.exact_space(s)

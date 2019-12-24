@@ -147,9 +147,10 @@ class REGEX:
                     new_output += s[i - 1]
                 else:
                     new_output += (s[i - 1],)
-                end_pos = min(len(new_output) - 1, i - 1)
-                score += np.sum(
-                    partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+                if input_pos != len(output):
+                    end_pos = min(len(new_output) - 1, i - 1)
+                    score += np.sum(
+                        partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
             if not is_end or (is_end and i == len(s)):
                 if Alphabet.is_char_model:  # if character-level model
                     if self.is_any or self.regex.fullmatch(s[:i]):

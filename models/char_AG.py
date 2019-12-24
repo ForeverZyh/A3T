@@ -136,7 +136,7 @@ def adv_train(saved_model_file, adv_model_file):
     for epoch in range(epochs):
         print("epoch %d:" % epoch)
         for i in range(0, training_num - held_out, batch_size):
-            if i % 100 == 0: print(f'\radversarial training at %d/%d' % (i, training_num), flush=True)
+            if i % 100 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
             batch_X = training_X[i:min(training_num - held_out, i + batch_size)]
             batch_Y = training_Y[i:min(training_num - held_out, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]
