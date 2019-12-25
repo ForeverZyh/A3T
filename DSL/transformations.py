@@ -35,7 +35,9 @@ class INS:
             end_pos = min(len(new_output) - 1, input_pos - 1)
             if end_pos == len(new_output) - 1:
                 score = np.sum(
-                    partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+                    partial_loss[end_pos] * (
+                            Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
+                        Alphabet.mapping[s[end_pos]]]))
             else:
                 score = 0
             ret.add(new_output, score)
@@ -81,8 +83,9 @@ class DEL:
         if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
             end_pos = min(len(output) - 1, input_pos)
             if end_pos == input_pos:
-                score = np.sum(
-                    partial_loss[end_pos] * (Alphabet.mapping[output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+                score = np.sum(partial_loss[end_pos] * (
+                        Alphabet.embedding[Alphabet.mapping[output[end_pos]]] - Alphabet.embedding[
+                    Alphabet.mapping[s[end_pos]]]))
             else:
                 score = 0
             return {input_pos + 1: [[output, score]]}
@@ -158,8 +161,9 @@ class REGEX:
                     new_output += (s[i - 1],)
                 if input_pos != len(output):
                     end_pos = min(len(new_output) - 1, i - 1)
-                    score += np.sum(
-                        partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+                    score += np.sum(partial_loss[end_pos] * (
+                            Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
+                        Alphabet.mapping[s[end_pos]]]))
             if not is_end or (is_end and i == len(s)):
                 if Alphabet.is_char_model:  # if character-level model
                     if self.is_any or self.regex.fullmatch(s[:i]):
@@ -226,7 +230,8 @@ class SWAP:
             score = 0
             for i in range(2):
                 score += np.sum(partial_loss[end_pos - i] * (
-                        Alphabet.mapping[new_output[end_pos - i]] - Alphabet.mapping[s[end_pos - i]]))
+                        Alphabet.embedding[Alphabet.mapping[new_output[end_pos - i]]] - Alphabet.embedding[
+                    Alphabet.mapping[s[end_pos - i]]]))
             return {input_pos + 2: [[new_output, score]]}
         else:
             return {}
@@ -286,7 +291,9 @@ class SUB:
                     new_output = output + (ss,)
                 end_pos = min(len(new_output) - 1, input_pos)
                 score = np.sum(
-                    partial_loss[end_pos] * (Alphabet.mapping[new_output[end_pos]] - Alphabet.mapping[s[end_pos]]))
+                    partial_loss[end_pos] * (
+                            Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
+                        Alphabet.mapping[s[end_pos]]]))
                 ret.add(new_output, score)
             return {input_pos + 1: ret.check_balance()}
         else:
@@ -512,7 +519,9 @@ class Transformation:
         if len(s) in ret:
             for data, score in ret[len(s)]:
                 for i in range(len(data), len(s)):
-                    score += np.sum(partial_loss[i] * (Alphabet.mapping[Alphabet.padding] - Alphabet.mapping[s[i]]))
+                    score += np.sum(partial_loss[i] * (
+                                Alphabet.embedding[Alphabet.mapping[Alphabet.padding]] - Alphabet.embedding[
+                            Alphabet.mapping[s[i]]]))
                 true_ret.add(data, score)
 
         return true_ret.check_balance()

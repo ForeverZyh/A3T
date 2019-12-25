@@ -52,8 +52,8 @@ def do_test():
 
     get_max_delta_test0()
 
-    # random_sample_test(a_untouched)
-    # char_test(a)
+    random_sample_test(a_untouched)
+    char_test(a)
     interval_convex_char_test(a, dl_sub)
     throughput_test(a)
     throughput_test1(dl_sub)
