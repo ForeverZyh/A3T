@@ -38,17 +38,14 @@ class char_AG:
                                                                       verbose=0, mode='auto',
                                                                       baseline=None, restore_best_weights=False)
         loss = Lambda(lambda x: categorical_crossentropy(x[0], x[1]))([self.y, self.logits])
-        # layer = Gradient(loss)
-        # partial = layer(look_up_c_d3)
-        # self.partial_to_loss_model = Model(inputs=[self.c, self.y], outputs=partial)
         gradient = tf.gradients(loss, look_up_c_d3)[0]
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
         def lambda_partial(x, y):
-            # return self.partial_to_loss_model.predict(x=[np.expand_dims(x, axis=0), np.expand_dims(y, axis=0)])[0]
             return \
-            self.sess.run(gradient, feed_dict={self.c: np.expand_dims(x, axis=0), self.y: np.expand_dims(y, axis=0)})[0]
+                self.sess.run(gradient,
+                              feed_dict={self.c: np.expand_dims(x, axis=0), self.y: np.expand_dims(y, axis=0)})[0]
 
         self.partial_to_loss = lambda_partial
 
@@ -62,25 +59,19 @@ class char_AG:
         x = self.fc1(x)
         x = self.fc2(x)
         self.adv_logits = self.fc3(x)
-        # self.adv_model = Model(inputs=[self.c, self.adv], outputs=[self.adv_logits, self.logits])
-        loss_layer = Lambda(lambda x: K.mean(categorical_crossentropy(self.y, x[0]) * 0.5 + categorical_crossentropy(self.y, x[1]) * 0.5))
+        loss_layer = Lambda(lambda x: K.mean(
+            categorical_crossentropy(self.y, x[0]) * 0.5 + categorical_crossentropy(self.y, x[1]) * 0.5))
         loss = loss_layer([self.adv_logits, self.logits])
         self.adv_model = Model(inputs=[self.c, self.adv, self.y], outputs=[loss])
         self.adv_model.add_loss(loss)
-        def fn(y_true, y_pred):
-            return categorical_crossentropy(y_true[0], y_pred[0]) * 0.5 + categorical_crossentropy(y_true[0], y_pred[1]) * 0.5        
-
         self.adv_model.compile(optimizer='RMSprop', loss=[None], loss_weights=[None])
 
 
 def train(filname):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
-    test_X = np.load("./dataset/AG/X_test.npy")
-    test_y = np.load("./dataset/AG/y_test.npy")
     nb_classes = 4
     training_Y = to_categorical(training_y, nb_classes)
-    test_Y = to_categorical(test_y, nb_classes)
 
     model = char_AG()
     model.model.fit(x=training_X, y=training_Y, batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
@@ -88,7 +79,7 @@ def train(filname):
     model.model.save_weights(filepath="./tmp/%s" % filname)
 
 
-def adv_train(saved_model_file, adv_model_file):
+def adv_train(adv_model_file):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -99,7 +90,6 @@ def adv_train(saved_model_file, adv_model_file):
     training_num = len(training_X)
 
     model = char_AG()
-    # model.model.load_weights("./tmp/%s" % saved_model_file)
 
     model.adversarial_training()
     Alphabet.set_char_model()
@@ -114,7 +104,6 @@ def adv_train(saved_model_file, adv_model_file):
                          SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
                          keep_same)
     a = Composition(sub, sub, sub)
-    # a = sub
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
@@ -148,7 +137,8 @@ def adv_train(saved_model_file, adv_model_file):
 
         Alphabet.embedding = model.embed.get_weights()[0]
         adv_batch_X = adv_batch(training_X[:held_out], training_Y[:held_out])
-        loss = model.adv_model.evaluate(x=[training_X[:held_out], adv_batch_X, training_Y[:held_out]], y=[], batch_size=64)
+        loss = model.adv_model.evaluate(x=[training_X[:held_out], adv_batch_X, training_Y[:held_out]], y=[],
+                                        batch_size=64)
         print("adv loss: %.2f" % loss)
         normal_loss, normal_acc = model.model.evaluate(x=test_X, y=test_Y, batch_size=64)
         print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
@@ -160,7 +150,9 @@ def adv_train(saved_model_file, adv_model_file):
             waiting = 0
             pre_loss = loss
 
-        model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epochs))
+        model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epoch))
+
+    model.adv_model.save_weights(filepath="./tmp/%s_epoch" % adv_model_file)
 
 
 def test_model(saved_model_file):
