@@ -336,5 +336,5 @@ def word_interval_test(b, b1, dogcat):
         max_delta = dogcat.get_max_delta()
         compute_delta = max_delta[0] * len(s) + max_delta[1]
         assert is_precise(res, precise_res) and compute_delta == precise_delta
-        
+
     print("interval_word_test passed...")
