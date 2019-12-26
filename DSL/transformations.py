@@ -484,10 +484,10 @@ class Transformation:
         '''
         inner_budget = b if self.inner_budget is None else self.inner_budget  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
         if isinstance(y_true, multiprocessing.connection.Connection):
-            y_true.send(Alphabet.toids(s))
+            y_true.send(Alphabet.to_ids(s))
             partial_loss = y_true.recv()
         else:
-            partial_loss = Alphabet.partial_to_loss(Alphabet.toids(s), y_true)
+            partial_loss = Alphabet.partial_to_loss(Alphabet.to_ids(s), y_true)
         ret = {}
         if Alphabet.is_char_model:  # if character-level model
             ret[0] = [["", 0]]

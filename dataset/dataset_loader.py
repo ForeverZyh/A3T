@@ -24,7 +24,7 @@ class Glove:
         glove_path = "./dataset/"
         try:
             Glove.embedding = np.load("./dataset/glove.npy")
-            Glove.str2id = dict(np.load('./dataset/glove_dict.npy').item())
+            Glove.str2id = dict(np.load('./dataset/glove_dict.npy', allow_pickle=True).item())
             Glove.id2str = [None] * len(Glove.str2id)
             for x in Glove.str2id:
                 Glove.id2str[Glove.str2id[x]] = x
@@ -47,6 +47,9 @@ class Glove:
             Glove.embedding.append(np.array([float(x) for x in tmp[1:]]))
             Glove.str2id[tmp[0]] = i + 1
             Glove.id2str.append(tmp[0])
+
+        # add embedding for UNK
+        Glove.embedding = [np.zeros_like(Glove.embedding[0])] + Glove.embedding
 
         Glove.embedding = np.array(Glove.embedding)
         np.save("./dataset/glove", Glove.embedding)
@@ -75,7 +78,7 @@ class SSTWordLevel:
     def get_synonym():
         pddb_path = "./dataset/"
         try:
-            SSTWordLevel.synonym_dict = dict(np.load("./dataset/synonym_dict.npy").item())
+            SSTWordLevel.synonym_dict = dict(np.load("./dataset/synonym_dict.npy", allow_pickle=True).item())
             print("Loading cached synonym_dict success!")
             return
         except:
@@ -105,21 +108,19 @@ class SSTWordLevel:
         Glove.build()
         SSTWordLevel.get_synonym()
 
-        tf.compat.v1.enable_eager_execution()
-
-        def prepare_ds(ds, X, y):
-            ds = ds.prefetch(10)
-            for features in ds:
+        def prepare_ds(ds):
+            X = []
+            y = []
+            for features in tfds.as_numpy(ds):
                 sentence, label = features["sentence"], features["label"]
-                tokens = word_tokenize(str(sentence.numpy()))
-                x = np.zeros(SSTWordLevel.max_len)
+                tokens = word_tokenize(str(sentence))
+                x = np.zeros(SSTWordLevel.max_len, dtype=np.int)
                 for (i, token) in enumerate(tokens):
                     x[i] = Glove.get_word_id(token)
                 X.append(x)
-                y.append(label.numpy())
+                y.append(label)
 
-            y = np.array(y)
-            X = np.array(X)
+            return np.array(X), np.array(y)
 
         try:
             SSTWordLevel.training_X = np.load("./dataset/SST2/X_train.npy")
@@ -127,29 +128,29 @@ class SSTWordLevel:
             print("Loading cached training dataset success!")
         except:
             ds_train = tfds.load(name="glue/sst2", split="train", shuffle_files=False)
-            prepare_ds(ds_train, SSTWordLevel.training_X, SSTWordLevel.training_y)
+            SSTWordLevel.training_X, SSTWordLevel.training_y = prepare_ds(ds_train)
             np.save("./dataset/SST2/X_train", SSTWordLevel.training_X)
             np.save("./dataset/SST2/y_train", SSTWordLevel.training_y)
             print("Loading training dataset success!")
 
         try:
-            SSTWordLevel.training_X = np.load("./dataset/SST2/X_val.npy")
-            SSTWordLevel.training_y = np.load("./dataset/SST2/y_val.npy")
+            SSTWordLevel.val_X = np.load("./dataset/SST2/X_val.npy")
+            SSTWordLevel.val_y = np.load("./dataset/SST2/y_val.npy")
             print("Loading cached validation dataset success!")
         except:
             ds_val = tfds.load(name="glue/sst2", split="validation", shuffle_files=False)
-            prepare_ds(ds_val, SSTWordLevel.val_X, SSTWordLevel.val_y)
+            SSTWordLevel.val_X, SSTWordLevel.val_y = prepare_ds(ds_val)
             np.save("./dataset/SST2/X_val", SSTWordLevel.val_X)
             np.save("./dataset/SST2/y_val", SSTWordLevel.val_y)
             print("Loading validation dataset success!")
 
         try:
-            SSTWordLevel.training_X = np.load("./dataset/SST2/X_test.npy")
-            SSTWordLevel.training_y = np.load("./dataset/SST2/y_test.npy")
+            SSTWordLevel.test_X = np.load("./dataset/SST2/X_test.npy")
+            SSTWordLevel.test_y = np.load("./dataset/SST2/y_test.npy")
             print("Loading cached test dataset success!")
         except:
             ds_test = tfds.load(name="glue/sst2", split="test", shuffle_files=False)
-            prepare_ds(ds_test, SSTWordLevel.test_X, SSTWordLevel.test_y)
+            SSTWordLevel.test_X, SSTWordLevel.test_y = prepare_ds(ds_test)
             np.save("./dataset/SST2/X_test", SSTWordLevel.test_X)
             np.save("./dataset/SST2/y_test", SSTWordLevel.test_y)
             print("Loading test dataset success!")

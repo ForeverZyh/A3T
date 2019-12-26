@@ -37,7 +37,7 @@ class Alphabet:
     '''
 
     @staticmethod
-    def toids(s):
+    def to_ids(s):
         if Alphabet.max_len is None or Alphabet.padding is None:
             raise AttributeError("max_len or padding is not set!")
 
@@ -47,6 +47,14 @@ class Alphabet:
         for _ in range(Alphabet.max_len - len(s)):
             ret.append(Alphabet.mapping[Alphabet.padding])
         return np.array(ret)
+
+    @staticmethod
+    def to_string(ids):
+        if Alphabet.is_char_model:
+            return "".join([Alphabet.alphabet[x] for x in ids])
+        else:
+            return tuple((Alphabet.alphabet[x]) for x in ids)
+
 
     @staticmethod
     def set_alphabet(a: dict, embedding, specified_escaped_char=None):

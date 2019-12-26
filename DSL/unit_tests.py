@@ -239,7 +239,7 @@ def beam_search_adversarial_test(a, t12, t3, t4):
     worse_output = ""
     for output in outputs:
         t = model.sess.run(model.loss,
-                           feed_dict={model.x: np.expand_dims(Alphabet.toids(output), axis=0),
+                           feed_dict={model.x: np.expand_dims(Alphabet.to_ids(output), axis=0),
                                       model.y: np.expand_dims(y, axis=0)})
         if worse < t:
             worse = t
