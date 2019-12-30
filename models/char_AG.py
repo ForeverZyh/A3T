@@ -13,6 +13,23 @@ from DSL.Alphabet import Alphabet
 from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, Gradient
 
 
+Alphabet.set_char_model()
+Alphabet.max_len = 300
+Alphabet.padding = " "
+dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
+Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
+keep_same = REGEX(r".*")
+chars = Dict(dict_map)
+#     sub = Transformation(keep_same,
+#                          SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
+#                          keep_same)
+#     a = Composition(sub, sub, sub)
+sub = SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c])
+swap = SWAP(lambda c: True, lambda c: True)
+# a = Transformation(keep_same, sub, keep_same, sub, keep_same, sub, keep_same)
+a = Composition(Transformation(keep_same, swap, keep_same), Transformation(keep_same, sub, keep_same))
+
+
 class char_AG:
     def __init__(self, all_voc_size=64, D=64):
         self.all_voc_size = all_voc_size
@@ -97,22 +114,7 @@ def adv_train(adv_model_file, load_weights=None):
     model = char_AG()
         
     model.adversarial_training()
-    Alphabet.set_char_model()
     Alphabet.partial_to_loss = model.partial_to_loss
-    Alphabet.max_len = 300
-    Alphabet.padding = " "
-    dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
-    Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
-    keep_same = REGEX(r".*")
-    chars = Dict(dict_map)
-#     sub = Transformation(keep_same,
-#                          SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
-#                          keep_same)
-#     a = Composition(sub, sub, sub)
-    sub = SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c])
-    swap = SWAP(lambda c: True, lambda c: True)
-    # a = Transformation(keep_same, sub, keep_same, sub, keep_same, sub, keep_same)
-    a = Composition(Transformation(keep_same, swap, keep_same), Transformation(keep_same, sub, keep_same))
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
@@ -181,7 +183,7 @@ def adv_train(adv_model_file, load_weights=None):
     model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
-def test_model(saved_model_file):
+def test_model(saved_model_file, func=None):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -190,35 +192,56 @@ def test_model(saved_model_file):
     training_Y = to_categorical(training_y, nb_classes)
     test_Y = to_categorical(test_y, nb_classes)
     training_num = len(training_X)
+    testing_num = len(test_X)
 
     model = char_AG()
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
     print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
-    dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
-    Alphabet.set_char_model()
-    Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
-    chars = Dict(dict_map)
-    adv_acc = 0
-    for x, y in zip(test_X, test_Y):
-        X = []
-        Y = []
-        for _ in range(64):
-            s = chars.to_string(x)
-            for subs in range(1):
-                t = np.random.randint(0, len(s))
-                while s[t] not in Alphabet.adjacent_keys:
-                    t = np.random.randint(0, len(s))
+    model.adversarial_training()
+    Alphabet.partial_to_loss = model.partial_to_loss
+    
+    def adv_batch(batch_X, batch_Y):
+        adv_batch_X = []
+        arg_list = []
+        for x, y in zip(batch_X, batch_Y):
+            arg_list.append((chars.to_string(x), y, 1))
+        rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
+        for i, ret in enumerate(rets):
+            adv_batch_X.append(chars.to_ids(ret[0]))
+            print(np.sum(np.not_equal(adv_batch_X[i], batch_X[i])), ret[1])
+            assert np.sum(np.not_equal(adv_batch_X[i], batch_X[i])) <= 3
+        return np.array(adv_batch_X)
+    
+    correct = 0
+    batch_size = 64
+    if func is not None:
+        for i, (x, y) in enumerate(zip(test_X, test_Y)):
+            oracle_iterator = func(x, True, batch_size)
+            all_correct = True
+            for batch_X in oracle_iterator:
+                batch_Y = np.tile(np.expand_dims(y, 0), (len(batch_X), 1))
+                loss, acc = model.model.test_on_batch(batch_X, batch_Y)
+                if acc != 1:
+                    all_correct = False
+                    break
+                
+            if all_correct: correct += 1
+            if (i + 1) % 100 == 0:
+                print(i + 1, correct * 100.0 / (i + 1))
+        
+        print("oracle acc: %.2f" % (correct * 100.0 / len(test_Y)))
+    else:
+        adv_acc = 0 
+        Alphabet.embedding = model.embed.get_weights()[0]
+        for i in range(0, testing_num, batch_size):
+            if i % 100 == 0: print('\radversarial testing at %d/%d' % (i, testing_num), flush=True)
+            batch_X = test_X[i:min(training_num, i + batch_size)]
+            batch_Y = test_Y[i:min(training_num, i + batch_size)]
+            adv_batch_X = adv_batch(batch_X, batch_Y)
+            loss, acc = model.model.evaluate(adv_batch_X, batch_Y)
+            if i % 100 == 0: print(loss, acc)
+            adv_acc += acc * len(batch_X)
+            return 
 
-                sub_chars = list(Alphabet.adjacent_keys[s[t]])
-                id = np.random.randint(0, len(sub_chars))
-                s = s[:t] + sub_chars[id] + s[t + 1:]
-
-            X.append(chars.to_ids(s))
-            Y.append(y)
-
-        loss, acc = model.model.test_on_batch(np.array(X), np.array(Y))
-        if acc == 1:
-            adv_acc += 1
-
-    print("adv acc: %.2f" % (adv_acc * 1.0 / len(test_Y)))
+        print("adv acc: %.2f" % (adv_acc * 1.0 / len(test_Y)))
