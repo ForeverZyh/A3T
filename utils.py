@@ -73,6 +73,22 @@ class MultiprocessingWithoutPipe:
             ans[num] = ret
 
         return ans
+    
+
+class Gradient(keras.layers.Layer):
+    def __init__(self, y, **kwargs):
+        super(Gradient, self).__init__(**kwargs)
+        self.y = y
+
+    def build(self, input_shape):
+        # Create a trainable weight variable for this layer.
+        super(Gradient, self).build(input_shape)  # Be sure to call this at the end
+
+    def call(self, x, **kwargs):
+        return K.gradients(self.y, x)[0]
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 def tuple_set_union(ret0: tuple, ret1: tuple):

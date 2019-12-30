@@ -6,10 +6,11 @@ import keras.backend as K
 from keras.losses import categorical_crossentropy
 import numpy as np
 import tensorflow as tf
+import copy
 
-from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union
+from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP
 from DSL.Alphabet import Alphabet
-from utils import Dict, Gradient, Multiprocessing
+from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, Gradient
 
 
 class char_AG:
@@ -38,14 +39,18 @@ class char_AG:
                                                                       verbose=0, mode='auto',
                                                                       baseline=None, restore_best_weights=False)
         loss = Lambda(lambda x: categorical_crossentropy(x[0], x[1]))([self.y, self.logits])
-        gradient = tf.gradients(loss, look_up_c_d3)[0]
-        self.sess = tf.Session()
-        self.sess.run(tf.global_variables_initializer())
+        layer = Gradient(loss)
+        partial = layer(look_up_c_d3)
+        self.partial_to_loss_model = Model(inputs=[self.c, self.y], outputs=partial)
+        # gradient = tf.gradients(loss, look_up_c_d3)[0]
+        # self.sess = tf.Session()
+        # self.sess.run(tf.global_variables_initializer())
 
         def lambda_partial(x, y):
-            return \
-                self.sess.run(gradient,
-                              feed_dict={self.c: np.expand_dims(x, axis=0), self.y: np.expand_dims(y, axis=0)})[0]
+            return self.partial_to_loss_model.predict(x=[np.expand_dims(x, axis=0), np.expand_dims(y, axis=0)])[0]
+#             return \
+#                 self.sess.run(gradient,
+#                               feed_dict={self.c: np.expand_dims(x, axis=0), self.y: np.expand_dims(y, axis=0)})[0]
 
         self.partial_to_loss = lambda_partial
 
@@ -72,14 +77,14 @@ def train(filname):
     training_y = np.load("./dataset/AG/y_train.npy")
     nb_classes = 4
     training_Y = to_categorical(training_y, nb_classes)
-
+    held_out = 1000
     model = char_AG()
-    model.model.fit(x=training_X, y=training_Y, batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
-                    validation_data=(training_X[:500], training_Y[:500]), shuffle=True)
+    model.model.fit(x=training_X[held_out:], y=training_Y[held_out:], batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
+                    validation_data=(training_X[:held_out], training_Y[:held_out]), shuffle=True)
     model.model.save_weights(filepath="./tmp/%s" % filname)
 
 
-def adv_train(adv_model_file):
+def adv_train(adv_model_file, load_weights=None):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -90,7 +95,7 @@ def adv_train(adv_model_file):
     training_num = len(training_X)
 
     model = char_AG()
-
+        
     model.adversarial_training()
     Alphabet.set_char_model()
     Alphabet.partial_to_loss = model.partial_to_loss
@@ -100,39 +105,60 @@ def adv_train(adv_model_file):
     Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
     keep_same = REGEX(r".*")
     chars = Dict(dict_map)
-    sub = Transformation(keep_same,
-                         SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
-                         keep_same)
-    a = Composition(sub, sub, sub)
+#     sub = Transformation(keep_same,
+#                          SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
+#                          keep_same)
+#     a = Composition(sub, sub, sub)
+    sub = SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c])
+    swap = SWAP(lambda c: True, lambda c: True)
+    # a = Transformation(keep_same, sub, keep_same, sub, keep_same, sub, keep_same)
+    a = Composition(Transformation(keep_same, swap, keep_same), Transformation(keep_same, sub, keep_same))
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
         arg_list = []
         for x, y in zip(batch_X, batch_Y):
             arg_list.append((chars.to_string(x), y, 1))
+            # arg_list.append((chars.to_string(x), 1))
         rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
-        for ret in rets:
-            # print(ret[0])
+        # rets = MultiprocessingWithoutPipe.mapping(a.random_sample, arg_list, 8)
+        for i, ret in enumerate(rets):
+            # print(ret)
+            # print(chars.to_string(batch_X[i]))
             adv_batch_X.append(chars.to_ids(ret[0]))
         return np.array(adv_batch_X)
-
+    
+    if load_weights is not None:
+        model.model.load_weights("./tmp/%s" % load_weights)
+        try:
+            tmp = load_weights.split("_")[-1]
+            if tmp[:5] == "epoch":
+                starting_epoch = int(tmp[5:]) + 1
+            else:
+                starting_epoch = 0
+        except:
+            starting_epoch = 0
+    else:
+        starting_epoch = 0
+        
     epochs = 30
     batch_size = 64
     pre_loss = 1e20
     patience = 5
     waiting = 0
     held_out = 1000
-    for epoch in range(epochs):
+    for epoch in range(starting_epoch, epochs):
         print("epoch %d:" % epoch)
-        for i in range(0, training_num - held_out, batch_size):
+        for i in range(held_out, training_num, batch_size):
             if i % 100 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
-            batch_X = training_X[i:min(training_num - held_out, i + batch_size)]
-            batch_Y = training_Y[i:min(training_num - held_out, i + batch_size)]
+            batch_X = training_X[i:min(training_num, i + batch_size)]
+            batch_Y = training_Y[i:min(training_num, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]
             adv_batch_X = adv_batch(batch_X, batch_Y)
-            # print(model.model.evaluate(batch_X, batch_Y))
-            # print(model.model.evaluate(adv_batch_X, batch_Y))
-            # print(model.adv_model.evaluate(x=[batch_X, adv_batch_X, batch_Y], y=[]))
+            if i % 100 == 0:
+                print(model.model.evaluate(batch_X, batch_Y))
+                print(model.model.evaluate(adv_batch_X, batch_Y))
+                # print(model.adv_model.evaluate(x=[batch_X, adv_batch_X, batch_Y], y=[]))
             model.adv_model.train_on_batch(x=[batch_X, adv_batch_X, batch_Y], y=[])
 
         Alphabet.embedding = model.embed.get_weights()[0]
@@ -152,7 +178,7 @@ def adv_train(adv_model_file):
 
         model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epoch))
 
-    model.adv_model.save_weights(filepath="./tmp/%s_epoch" % adv_model_file)
+    model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
 def test_model(saved_model_file):
