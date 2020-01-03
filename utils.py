@@ -10,7 +10,7 @@ class Multiprocessing:
     @staticmethod
     def work(fun, child_conn, args):
         ret = fun(args[0], child_conn, args[2])
-        child_conn.send(("close", ret[0]))
+        child_conn.send(("close", ret))
 
     @staticmethod
     def mapping(fun, args_list, processes, partial_to_loss):

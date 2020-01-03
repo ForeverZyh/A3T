@@ -127,7 +127,7 @@ def adv_train(adv_model_file, load_weights=None):
         for i, ret in enumerate(rets):
             # print(ret)
             # print(chars.to_string(batch_X[i]))
-            adv_batch_X.append(chars.to_ids(ret[0]))
+            adv_batch_X.append(chars.to_ids(ret[0][0]))
         return np.array(adv_batch_X)
     
     if load_weights is not None:
