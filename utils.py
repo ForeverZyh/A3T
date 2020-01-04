@@ -210,3 +210,9 @@ class Dict:
 
     def to_ids(self, s):
         return np.array([self.char2id[c] for c in s])
+
+    
+def swap_pytorch(x, y):
+    z = x.clone()
+    x = y
+    y = z
