@@ -212,7 +212,7 @@ class Dict:
         return np.array([self.char2id[c] for c in s])
 
     
-def swap_pytorch(x, y):
-    z = x.clone()
-    x = y
-    y = z
+def swap_pytorch(x, p1, p2):
+    z = x[p1].clone()
+    x[p1] = x[p2]
+    x[p2] = z
