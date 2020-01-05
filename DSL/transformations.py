@@ -221,7 +221,7 @@ class SWAP:
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
         if input_pos + 1 < len(s) and s[input_pos] in self.alphabet_acc_set[0] and s[input_pos + 1] in \
-                self.alphabet_acc_set[1]:
+                self.alphabet_acc_set[1] and s[input_pos] != s[input_pos + 1]:
             if Alphabet.is_char_model:  # if character-level model
                 new_output = output + s[input_pos + 1] + s[input_pos]
             else:
