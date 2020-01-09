@@ -46,14 +46,18 @@ class Alphabet:
             ret.append(Alphabet.mapping[ss])
         for _ in range(Alphabet.max_len - len(s)):
             ret.append(Alphabet.mapping[Alphabet.padding])
-        return np.array(ret)
+        return np.array(ret[:Alphabet.max_len])
 
     @staticmethod
-    def to_string(ids):
+    def to_string(ids, remove_padding=False):
+        end = len(ids)
+        if remove_padding:
+            while end > 0 and ids[end - 1] == Alphabet.mapping[Alphabet.padding]:
+                end -= 1
         if Alphabet.is_char_model:
-            return "".join([Alphabet.alphabet[x] for x in ids])
+            return "".join([Alphabet.alphabet[x] for x in ids[:end]])
         else:
-            return tuple((Alphabet.alphabet[x]) for x in ids)
+            return tuple((Alphabet.alphabet[x]) for x in ids[:end])
 
 
     @staticmethod

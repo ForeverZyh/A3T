@@ -1,5 +1,5 @@
 import keras
-from keras.layers import Embedding, Input, Dense, Lambda, Conv2D, MaxPooling2D, Flatten
+from keras.layers import Embedding, Input, Dense, Lambda, Conv2D, MaxPooling2D, Flatten, AveragePooling2D
 from keras.models import Model
 from keras.utils import to_categorical
 import keras.backend as K
@@ -41,8 +41,8 @@ class char_AG:
         look_up_c = Lambda(lambda x: K.expand_dims(x, -1))(look_up_c_d3)
         self.conv2d = Conv2D(64, 10, activation="relu")
         x = self.conv2d(look_up_c)
-        self.maxpooling = MaxPooling2D(10)
-        x = self.maxpooling(x)
+        self.avgpooling = AveragePooling2D(10)
+        x = self.avgpooling(x)
         x = Flatten()(x)
         self.fc1 = Dense(64, activation='relu')
         x = self.fc1(x)
@@ -76,7 +76,7 @@ class char_AG:
         look_up_c = self.embed(self.adv)
         look_up_c = Lambda(lambda x: K.expand_dims(x, -1))(look_up_c)
         x = self.conv2d(look_up_c)
-        x = self.maxpooling(x)
+        x = self.avgpooling(x)
         x = Flatten()(x)
         x = self.fc1(x)
         x = self.fc2(x)
