@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 
 from dataset.dataset_loader import SSTWordLevel, Glove
-from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP
+from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP, DUP
 from DSL.Alphabet import Alphabet
 from utils import Multiprocessing, Gradient
 
@@ -23,17 +23,14 @@ keep_same = REGEX(r".*")
 sub = Transformation(keep_same,
                      SUB(lambda c: c in SSTWordLevel.synonym_dict, lambda c: SSTWordLevel.synonym_dict[c]),
                      keep_same)
-swap = Transformation(keep_same,
-                     SWAP(lambda c: True, lambda c: True),
-                     keep_same)
 delete = Transformation(keep_same,
                      DEL(lambda c: c in ["a", "the", "and", "to", "of"]),
                      keep_same)
 ins = Transformation(keep_same,
-                     INS(lambda c: c in ["a", "the", "and", "to", "of"]),
+                     DUP(lambda c: True),
                      keep_same)
-# a = Composition(sub, swap, ins, delete)
-a = Composition(swap, sub)
+a = Composition(sub, ins, delete)
+# a = Composition(swap, sub)
 
 class word_SST2:
     def __init__(self):

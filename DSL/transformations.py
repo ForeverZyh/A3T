@@ -56,6 +56,53 @@ class INS:
 
         return {input_pos: ret.check_balance()}
 
+    
+class DUP:
+    def __init__(self, phi):
+        self.phi = phi
+        self.alphabet_acc = Alphabet.get_acc_alphabet(self.phi)
+        self.alphabet_acc_set = set(self.alphabet_acc)
+
+    def exact_space(self, s):
+        ret = set()
+        if len(s) > 0 and s[0] in self.alphabet_acc_set:
+            if Alphabet.is_char_model:  # if character-level model
+                ret.add((0, s[0]))
+            else:  # if word-level model
+                ret.add((0, (s[0],)))
+        return ret
+
+    def interval_space(self, s):
+        if len(s) > 0 and not set(self.alphabet_acc).isdisjoint(set(s[0])):
+            return {0: ((s[0], ),)}
+        else:
+            return {}
+
+    def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
+        assert b > 0
+        ret = Beam(b)
+        if len(s) > 0 and s[0] in self.alphabet_acc_set:
+            c = s[0]
+            if Alphabet.is_char_model:  # if character-level model
+                new_output = output + c
+            else:  # if word-level model
+                new_output = output + (c,)
+            ret.add(new_output, 0)
+
+        return {input_pos: ret.check_balance()}
+
+    def random_sample(self, s, output, input_pos, b):
+        assert b > 0
+        ret = UnorderedBeam(b)
+        if len(s) > 0 and s[0] in self.alphabet_acc_set:
+            if Alphabet.is_char_model:  # if character-level model
+                new_output = output + s[0]
+            else:  # if word-level model
+                new_output = output + (s[0],)
+            ret.add(new_output)
+
+        return {input_pos: ret.check_balance()}
+
 
 class DEL:
     def __init__(self, phi):
@@ -339,7 +386,7 @@ class tUnion:
                 self.has_sub |= x.has_sub
 
             assert isinstance(x, REGEX) or isinstance(x, DEL) or isinstance(x, INS) or isinstance(x, SWAP) \
-                   or isinstance(x, SUB) or isinstance(x, tUnion)
+                   or isinstance(x, SUB) or isinstance(x, tUnion) or isinstance(x, DUP)
 
     def exact_space(self, s):
         ret = set()
@@ -410,7 +457,7 @@ class Transformation:
             self.inner_budget = None
         for x in self.seq:
             assert isinstance(x, REGEX) or isinstance(x, DEL) or isinstance(x, INS) or isinstance(x, SWAP) \
-                   or isinstance(x, SUB) or isinstance(x, tUnion)
+                   or isinstance(x, SUB) or isinstance(x, tUnion) or isinstance(x, DUP)
 
     def exact_space(self, s):
         if s in self.cache_exact:
