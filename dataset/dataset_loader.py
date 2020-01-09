@@ -66,6 +66,7 @@ class SSTWordLevel:
     val_y = []
     synonym_dict = {}
     max_len = 56
+    is_built = False
 
     @staticmethod
     def synonym_dict_add_str(x, y):
@@ -105,6 +106,9 @@ class SSTWordLevel:
 
     @staticmethod
     def build():
+        if SSTWordLevel.is_built:    # make sure it will only be built once
+            return
+        SSTWordLevel.is_built = True
         Glove.build()
         SSTWordLevel.get_synonym()
 

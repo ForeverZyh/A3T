@@ -182,7 +182,7 @@ def adv_train(adv_model_file, load_weights=None):
     model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
-def test_model(saved_model_file):
+def test_model(saved_model_file, func=None):
     model = word_SST2()
     test_X = SSTWordLevel.test_X
     test_y = SSTWordLevel.test_y
@@ -194,3 +194,24 @@ def test_model(saved_model_file):
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
     print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
+    
+    correct = 0
+    batch_size = 64
+    if func is not None:
+        for i, (x, y) in enumerate(zip(test_X, test_Y)):
+            oracle_iterator = func(x, True, batch_size)
+            all_correct = True
+            for batch_X in oracle_iterator:
+                batch_Y = np.tile(np.expand_dims(y, 0), (len(batch_X), 1))
+                loss, acc = model.model.test_on_batch(batch_X, batch_Y)
+                if acc != 1:
+                    all_correct = False
+                    break
+                
+            if all_correct: correct += 1
+            if (i + 1) % 100 == 0:
+                print(i + 1, correct * 100.0 / (i + 1))
+        
+        print("oracle acc: %.2f" % (correct * 100.0 / len(test_Y)))
+    else:
+        raise(NotImplementedError("adv does not support yet!"))
