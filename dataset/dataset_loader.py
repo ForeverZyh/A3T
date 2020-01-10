@@ -65,6 +65,7 @@ class SSTWordLevel:
     val_X = []
     val_y = []
     synonym_dict = {}
+    synonym_dict_id = {}
     max_len = 56
     is_built = False
 
@@ -72,17 +73,21 @@ class SSTWordLevel:
     def synonym_dict_add_str(x, y):
         if x not in SSTWordLevel.synonym_dict:
             SSTWordLevel.synonym_dict[x] = [y]
+            SSTWordLevel.synonym_dict_id[Glove.str2id[x]] = [Glove.str2id[y]]
 
     @staticmethod
     def get_synonym():
         pddb_path = "./dataset/"
         try:
             SSTWordLevel.synonym_dict = dict(np.load("./dataset/synonym_dict.npy", allow_pickle=True).item())
+            SSTWordLevel.synonym_dict_id = dict(np.load("./dataset/synonym_dict_id.npy", allow_pickle=True).item())
             print("Loading cached synonym_dict success!")
             return
         except:
             pass
-
+        
+        synonym_dict = {}
+        synonym_dict_id = {}
         pddb_files = [f for f in listdir(pddb_path) if isfile(join(pddb_path, f)) and f[:4] == "ppdb"]
         if len(pddb_files) == 0:
             raise AttributeError("No PPDB files found in ./dataset/")
@@ -99,6 +104,7 @@ class SSTWordLevel:
                 SSTWordLevel.synonym_dict_add_str(y, x)
 
         np.save("./dataset/synonym_dict", SSTWordLevel.synonym_dict)
+        np.save("./dataset/synonym_dict_id", SSTWordLevel.synonym_dict_id)
         print(SSTWordLevel.synonym_dict)
         print("Loading synonym_dict success!")
 
@@ -164,3 +170,4 @@ class SSTWordLevel:
             np.save("./dataset/SST2/X_test", SSTWordLevel.test_X)
             np.save("./dataset/SST2/y_test", SSTWordLevel.test_y)
             print("Loading test dataset success!")
+
