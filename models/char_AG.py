@@ -1,5 +1,5 @@
 import keras
-from keras.layers import Embedding, Input, Dense, Lambda, Conv2D, MaxPooling2D, Flatten, AveragePooling2D
+from keras.layers import Embedding, Input, Dense, Lambda, Conv1D, Flatten, AveragePooling1D
 from keras.models import Model
 from keras.utils import to_categorical
 import keras.backend as K
@@ -31,17 +31,16 @@ a = Composition(Transformation(keep_same, swap, keep_same), Transformation(keep_
 
 
 class char_AG:
-    def __init__(self, all_voc_size=64, D=64):
+    def __init__(self, all_voc_size=56, D=64):
         self.all_voc_size = all_voc_size
         self.D = D
         self.c = Input(shape=(300,), dtype='int32')
         self.y = Input(shape=(4,), dtype='float32')
         self.embed = Embedding(self.all_voc_size, self.D, name="embedding")
         look_up_c_d3 = self.embed(self.c)
-        look_up_c = Lambda(lambda x: K.expand_dims(x, -1))(look_up_c_d3)
-        self.conv2d = Conv2D(64, 10, activation="relu")
-        x = self.conv2d(look_up_c)
-        self.avgpooling = AveragePooling2D(10)
+        self.conv1d = Conv1D(64, 10, activation="relu")
+        x = self.conv1d(look_up_c_d3)
+        self.avgpooling = AveragePooling1D(10)
         x = self.avgpooling(x)
         x = Flatten()(x)
         self.fc1 = Dense(64, activation='relu')
@@ -74,8 +73,7 @@ class char_AG:
     def adversarial_training(self):
         self.adv = Input(shape=(300,), dtype='int32')
         look_up_c = self.embed(self.adv)
-        look_up_c = Lambda(lambda x: K.expand_dims(x, -1))(look_up_c)
-        x = self.conv2d(look_up_c)
+        x = self.conv1d(look_up_c)
         x = self.avgpooling(x)
         x = Flatten()(x)
         x = self.fc1(x)
@@ -178,7 +176,7 @@ def adv_train(adv_model_file, load_weights=None):
             waiting = 0
             pre_loss = loss
 
-        model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epoch))
+#         model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epoch))
 
     model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 

@@ -71,9 +71,7 @@ class SSTWordLevel:
     @staticmethod
     def synonym_dict_add_str(x, y):
         if x not in SSTWordLevel.synonym_dict:
-            SSTWordLevel.synonym_dict[x] = set()
-
-        SSTWordLevel.synonym_dict[x].add(y)
+            SSTWordLevel.synonym_dict[x] = [y]
 
     @staticmethod
     def get_synonym():
