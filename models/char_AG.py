@@ -165,9 +165,9 @@ def adv_train(adv_model_file, load_weights=None):
         adv_batch_X = adv_batch(training_X[:held_out], training_Y[:held_out])
         loss = model.adv_model.evaluate(x=[training_X[:held_out], adv_batch_X, training_Y[:held_out]], y=[],
                                         batch_size=64)
-        print("adv loss: %.2f" % loss)
+        print("adv loss: %.4f" % loss)
         normal_loss, normal_acc = model.model.evaluate(x=test_X, y=test_Y, batch_size=64)
-        print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
+        print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
         if loss > pre_loss:
             waiting += 1
             if waiting > patience:
@@ -195,7 +195,7 @@ def test_model(saved_model_file, func=None):
     model = char_AG()
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
-    print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
+    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     model.adversarial_training()
     Alphabet.partial_to_loss = model.partial_to_loss
     
@@ -206,8 +206,7 @@ def test_model(saved_model_file, func=None):
             arg_list.append((chars.to_string(x), y, 1))
         rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
         for i, ret in enumerate(rets):
-            adv_batch_X.append(chars.to_ids(ret[0]))
-            print(np.sum(np.not_equal(adv_batch_X[i], batch_X[i])), ret[1])
+            adv_batch_X.append(chars.to_ids(ret[0][0]))
             assert np.sum(np.not_equal(adv_batch_X[i], batch_X[i])) <= 3
         return np.array(adv_batch_X)
     
@@ -228,7 +227,7 @@ def test_model(saved_model_file, func=None):
             if (i + 1) % 100 == 0:
                 print(i + 1, correct * 100.0 / (i + 1))
         
-        print("oracle acc: %.2f" % (correct * 100.0 / len(test_Y)))
+        print("oracle acc: %.4f" % (correct * 100.0 / len(test_Y)))
     else:
         adv_acc = 0 
         Alphabet.embedding = model.embed.get_weights()[0]
@@ -240,6 +239,5 @@ def test_model(saved_model_file, func=None):
             loss, acc = model.model.evaluate(adv_batch_X, batch_Y)
             if i % 100 == 0: print(loss, acc)
             adv_acc += acc * len(batch_X)
-            return 
 
-        print("adv acc: %.2f" % (adv_acc * 1.0 / len(test_Y)))
+        print("adv acc: %.4f" % (adv_acc * 1.0 / len(test_Y)))
