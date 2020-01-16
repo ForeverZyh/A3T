@@ -2,7 +2,7 @@ import numpy as np
 import time
 import signal
 
-from DSL.transformations import REGEX, Transformation, INS, tUnion, SWAP, SUB, DEL, Composition, Union
+from DSL.transformations import REGEX, Transformation, INS, tUnion, SWAP, SUB, DEL, Composition, Union, TransformationDel, TransformationIns, DUP
 from DSL.Alphabet import Alphabet
 from utils import tuple_set_union, Beam, Multiprocessing, MultiprocessingWithoutPipe
 
@@ -218,6 +218,29 @@ class SimpleModel:
                              feed_dict={self.x: np.expand_dims(embedding, axis=0), self.y: np.expand_dims(y, axis=0)})[
             0]
 
+    
+def beam_search_adversarial_test_delins():
+    Alphabet.set_char_model()
+    Alphabet.max_len = 10
+    Alphabet.padding = " "
+    dict_map = {" ": 0}
+    for i in range(26):
+        dict_map[chr(97 + i)] = i + 1
+    Alphabet.set_alphabet(dict_map, np.random.normal(0, 1, (len(dict_map), 2)))
+    s = 'abcsabb'
+    y = np.array([0, 1, 0])
+    model = SimpleModel()
+    Alphabet.partial_to_loss = model.partial_to_loss
+    regex1 = REGEX(r'.*')
+    del1 = Transformation(regex1, DEL(lambda c: True), regex1)
+    del2 = TransformationDel()
+    print(del1.beam_search_adversarial(s, y, 10))
+    print(del2.beam_search_adversarial(s, y, 10))
+    ins1 = Transformation(regex1, DUP(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]), regex1)
+    ins2 = TransformationIns()
+    print(ins1.beam_search_adversarial(s, y, 10))
+    print(ins2.beam_search_adversarial(s, y, 10))
+    
 
 def beam_search_adversarial_test(a, t12, t3, t4):
     s = 'abcsabb'

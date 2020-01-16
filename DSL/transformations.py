@@ -89,9 +89,9 @@ class DUP:
             for c in dup_set:
                 pre_pos = min(len(output), input_pos)
                 if Alphabet.is_char_model:  # if character-level model
-                    new_output = output + s[0] + c 
+                    new_output = output + s[input_pos] + c 
                 else:  # if word-level model
-                    new_output = output + (s[0], c,)
+                    new_output = output + (s[input_pos], c,)
                 end_pos = min(len(new_output), input_pos + 1)
                 score = 0
                 for pos in range(pre_pos, end_pos):
@@ -111,9 +111,9 @@ class DUP:
             dup_set = self.fun(s[input_pos])
             for c in dup_set:
                 if Alphabet.is_char_model:  # if character-level model
-                    new_output = output + s[0] + c
+                    new_output = output + s[input_pos] + c
                 else:  # if word-level model
-                    new_output = output + (s[0], c)
+                    new_output = output + (s[input_pos], c)
                 ret.add(new_output)
 
         return {input_pos + 1: ret.check_balance()}
@@ -233,7 +233,7 @@ class REGEX:
                 else:  # if word-level model
                     if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
                         ret[i] = [[new_output, score]]
-
+        
         return ret
 
     def random_sample(self, s, output, input_pos, b, is_end=False):
@@ -550,6 +550,7 @@ class Transformation:
             partial_loss = y_true.recv()
         else:
             partial_loss = Alphabet.partial_to_loss(Alphabet.to_ids(s), y_true)
+
         ret = {}
         if Alphabet.is_char_model:  # if character-level model
             ret[0] = [["", 0]]
@@ -575,16 +576,16 @@ class Transformation:
             for pos in new_ret:
                 new_ret[pos] = new_ret[pos].check_balance()
             ret = new_ret
-
+        
         true_ret = Beam(b)
         true_ret.add(s, 0)
-        end_pos = min(len(s), Alphabet.max_len)
-        if end_pos in ret:
-            for data, score in ret[end_pos]:
-                for i in range(len(data), end_pos):
+        if len(s) in ret:
+            for data, score in ret[len(s)]:
+                pre_pos = min(len(data), len(s))
+                end_pos = min(max(len(data), len(s)), Alphabet.max_len)
+                for i in range(pre_pos, end_pos):
                     score += np.sum(partial_loss[i] * (
-                                Alphabet.embedding[Alphabet.mapping[Alphabet.padding]] - Alphabet.embedding[
-                            Alphabet.mapping[s[i]]]))
+                        Alphabet.embedding[Alphabet.mapping[data[i] if i < len(data) else Alphabet.padding]] - Alphabet.embedding[Alphabet.mapping[s[i] if i < len(s) else Alphabet.padding]]))
                 true_ret.add(data, score)
 
         return true_ret.check_balance()
@@ -653,6 +654,121 @@ class Transformation:
         return get_max_delta(self)
 
 
+class TransformationDel(Transformation):    
+    def __init__(self, *arg, **kwargs):
+        if "inner_budget" in kwargs:
+            self.inner_budget = kwargs["inner_budget"]
+        else:
+            self.inner_budget = None
+
+    def beam_search_adversarial(self, s, y_true, b):
+        '''
+        Beam search for the transformation. Not sure should the beam search be used here.
+        The HotFlip paper uses brute-force enumerate. Or it uses the beam search with b>0.
+            (since only there is only one beam in terms of position).
+        If we used beam search here: it can boost the speed, but downgrade the adversarial examples
+        This implementation used the beam search with budget the same as the outside beam search budget, b
+        :param s: the input string s
+        :param b: the budget for the beam search
+        :return: the a list of adversarial examples within budget b
+        '''
+        inner_budget = b if self.inner_budget is None else self.inner_budget  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
+        if isinstance(y_true, multiprocessing.connection.Connection):
+            y_true.send(Alphabet.to_ids(s))
+            partial_loss = y_true.recv()
+        else:
+            partial_loss = Alphabet.partial_to_loss(Alphabet.to_ids(s), y_true)
+        
+        sum_suffix = []
+        for i in range(len(s) - 1):
+            sum_suffix.append(np.sum(partial_loss[i] * (
+                Alphabet.embedding[Alphabet.mapping[s[i + 1]]] - Alphabet.embedding[Alphabet.mapping[s[i]]])))
+        sum_suffix.append(np.sum(partial_loss[len(s) - 1] * (
+            Alphabet.embedding[Alphabet.mapping[Alphabet.padding]] - Alphabet.embedding[Alphabet.mapping[s[len(s) - 1]]])))
+        for i in range(len(sum_suffix) - 2, -1, -1):
+            sum_suffix[i] += sum_suffix[i + 1]
+            
+        true_ret = Beam(b)
+        true_ret.add(s, 0)
+        delete_pos = [i for i in range(len(s))]
+        delete_pos.sort(key=lambda x:-sum_suffix[x])
+        for i in range(min(b, len(delete_pos))):
+            pos = delete_pos[i]
+            if sum_suffix[pos] < 0:
+                break
+            true_ret.add(s[:pos] + s[pos + 1:], sum_suffix[pos])
+            
+        return true_ret.check_balance()
+
+    
+class TransformationIns(Transformation):    
+    def __init__(self, *arg, **kwargs):
+        if "inner_budget" in kwargs:
+            self.inner_budget = kwargs["inner_budget"]
+        else:
+            self.inner_budget = None
+
+    def beam_search_adversarial(self, s, y_true, b):
+        '''
+        Beam search for the transformation. Not sure should the beam search be used here.
+        The HotFlip paper uses brute-force enumerate. Or it uses the beam search with b>0.
+            (since only there is only one beam in terms of position).
+        If we used beam search here: it can boost the speed, but downgrade the adversarial examples
+        This implementation used the beam search with budget the same as the outside beam search budget, b
+        :param s: the input string s
+        :param b: the budget for the beam search
+        :return: the a list of adversarial examples within budget b
+        '''
+        inner_budget = b if self.inner_budget is None else self.inner_budget  # can be adjusted to meet the user's demand, set np.inf to do brute_force enumeration
+        if isinstance(y_true, multiprocessing.connection.Connection):
+            y_true.send(Alphabet.to_ids(s))
+            partial_loss = y_true.recv()
+        else:
+            partial_loss = Alphabet.partial_to_loss(Alphabet.to_ids(s), y_true)
+        
+        sum_suffix = [0]
+        for i in range(1, len(s)):
+            sum_suffix.append(np.sum(partial_loss[i] * (
+                Alphabet.embedding[Alphabet.mapping[s[i - 1]]] - Alphabet.embedding[Alphabet.mapping[s[i]]])))
+        if len(s) < Alphabet.max_len:
+            sum_suffix.append(np.sum(partial_loss[len(s)] * (
+                Alphabet.embedding[Alphabet.mapping[s[len(s) - 1]]] - Alphabet.embedding[Alphabet.mapping[Alphabet.padding]])))
+        sum_suffix.append(0)
+        for i in range(len(sum_suffix) - 2, -1, -1):
+            sum_suffix[i] += sum_suffix[i + 1]
+        cost = [-10000 for i in range(len(s))]
+        if len(s) < Alphabet.max_len:
+            for i in range(len(s)):
+                if s[i] in Alphabet.adjacent_keys:
+                    t = list(Alphabet.adjacent_keys[s[i]])[0]
+                    if i + 1 < len(s):
+                        cost[i] = sum_suffix[i + 2] + np.sum(partial_loss[i + 1] * (
+                            Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[Alphabet.mapping[s[i + 1]]]))
+                    else:
+                        cost[i] = sum_suffix[i + 2] + np.sum(partial_loss[i + 1] * (
+                            Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[Alphabet.mapping[Alphabet.padding]]))
+        else:
+            for i in range(len(s) - 1):
+                if s[i] in Alphabet.adjacent_keys:
+                    t = list(Alphabet.adjacent_keys[s[i]])[0]
+                    cost[i] = sum_suffix[i + 2] + np.sum(partial_loss[i + 1] * (
+                        Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[Alphabet.mapping[s[i + 1]]]))
+                
+            
+        true_ret = Beam(b)
+        true_ret.add(s, 0)
+        ins_pos = [i for i in range(len(s))]
+        ins_pos.sort(key=lambda x:-cost[x])
+        for i in range(min(b, len(ins_pos))):
+            pos = ins_pos[i]
+            if cost[pos] < 0:
+                break
+            t = list(Alphabet.adjacent_keys[s[pos]])[0]
+            true_ret.add((s[:pos + 1] + t + s[pos + 1:])[:Alphabet.max_len], cost[pos])
+            
+        return true_ret.check_balance()
+
+    
 class Union:
     def __init__(self, *args):
         self.p = args
@@ -837,3 +953,4 @@ def get_max_delta(self):
             self.max_delta = [0, self.get_delta()]
 
     return self.max_delta
+
