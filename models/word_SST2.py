@@ -27,7 +27,7 @@ delete = Transformation(keep_same,
                      DEL(lambda c: c in ["a", "the", "and", "to", "of"]),
                      keep_same)
 ins = Transformation(keep_same,
-                     DUP(lambda c: True),
+                     DUP(lambda c: True, lambda c: [c]),
                      keep_same)
 a = Composition(sub, ins, delete)
 # a = Composition(swap, sub)
@@ -163,9 +163,9 @@ def adv_train(adv_model_file, load_weights=None):
         Alphabet.embedding = model.embed.get_weights()[0]
         adv_batch_X = adv_batch(val_X, val_Y)
         loss = model.adv_model.evaluate(x=[val_X, adv_batch_X, val_Y], y=[], batch_size=64)
-        print("adv loss: %.2f" % loss)
+        print("adv loss: %.4f" % loss)
         normal_loss, normal_acc = model.model.evaluate(x=test_X, y=test_Y, batch_size=64)
-        print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
+        print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
         if loss > pre_loss:
             waiting += 1
             if waiting > patience:
@@ -190,7 +190,7 @@ def test_model(saved_model_file, func=None):
     
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
-    print("normal loss: %.2f\t normal acc: %.2f" % (normal_loss, normal_acc))
+    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     
     correct = 0
     batch_size = 64
@@ -209,6 +209,6 @@ def test_model(saved_model_file, func=None):
             if (i + 1) % 100 == 0:
                 print(i + 1, correct * 100.0 / (i + 1))
         
-        print("oracle acc: %.2f" % (correct * 100.0 / len(test_Y)))
+        print("oracle acc: %.4f" % (correct * 100.0 / len(test_Y)))
     else:
         raise(NotImplementedError("adv does not support yet!"))

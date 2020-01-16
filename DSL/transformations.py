@@ -58,50 +58,65 @@ class INS:
 
     
 class DUP:
-    def __init__(self, phi):
+    def __init__(self, phi, fun):
         self.phi = phi
+        self.fun = fun
         self.alphabet_acc = Alphabet.get_acc_alphabet(self.phi)
         self.alphabet_acc_set = set(self.alphabet_acc)
 
     def exact_space(self, s):
         ret = set()
         if len(s) > 0 and s[0] in self.alphabet_acc_set:
-            if Alphabet.is_char_model:  # if character-level model
-                ret.add((0, s[0]))
-            else:  # if word-level model
-                ret.add((0, (s[0],)))
+            dup_set = self.fun(s[0])
+            for c in dup_set:
+                if Alphabet.is_char_model:  # if character-level model
+                    ret.add((1, s[0] + c))
+                else:  # if word-level model
+                    ret.add((1, (s[0], c)))
         return ret
 
     def interval_space(self, s):
         if len(s) > 0 and not set(self.alphabet_acc).isdisjoint(set(s[0])):
-            return {0: ((s[0], ),)}
+            return {1: ((s[0],), tuple(self.fun(s[0])))}
         else:
             return {}
 
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
         ret = Beam(b)
-        if len(s) > 0 and s[0] in self.alphabet_acc_set:
-            c = s[0]
-            if Alphabet.is_char_model:  # if character-level model
-                new_output = output + c
-            else:  # if word-level model
-                new_output = output + (c,)
-            ret.add(new_output, 0)
+        if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
+            dup_set = self.fun(s[input_pos])
+            for c in dup_set:
+                pre_pos = min(len(output), input_pos)
+                if Alphabet.is_char_model:  # if character-level model
+                    new_output = output + s[0] + c 
+                else:  # if word-level model
+                    new_output = output + (s[0], c,)
+                end_pos = min(len(new_output), input_pos + 1)
+                score = 0
+                for pos in range(pre_pos, end_pos):
+                    score += np.sum(
+                        partial_loss[pos] * (
+                                Alphabet.embedding[Alphabet.mapping[new_output[pos]]] - Alphabet.embedding[
+                            Alphabet.mapping[s[pos]]]))
+                    
+                ret.add(new_output, score)
 
-        return {input_pos: ret.check_balance()}
+        return {input_pos + 1: ret.check_balance()}
 
     def random_sample(self, s, output, input_pos, b):
         assert b > 0
         ret = UnorderedBeam(b)
-        if len(s) > 0 and s[0] in self.alphabet_acc_set:
-            if Alphabet.is_char_model:  # if character-level model
-                new_output = output + s[0]
-            else:  # if word-level model
-                new_output = output + (s[0],)
-            ret.add(new_output)
+        if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
+            dup_set = self.fun(s[input_pos])
+            for c in dup_set:
+                if Alphabet.is_char_model:  # if character-level model
+                    new_output = output + s[0] + c
+                else:  # if word-level model
+                    new_output = output + (s[0], c)
+                ret.add(new_output)
 
-        return {input_pos: ret.check_balance()}
+        return {input_pos + 1: ret.check_balance()}
 
 
 class DEL:
@@ -563,9 +578,10 @@ class Transformation:
 
         true_ret = Beam(b)
         true_ret.add(s, 0)
-        if len(s) in ret:
-            for data, score in ret[len(s)]:
-                for i in range(len(data), len(s)):
+        end_pos = min(len(s), Alphabet.max_len)
+        if end_pos in ret:
+            for data, score in ret[end_pos]:
+                for i in range(len(data), end_pos):
                     score += np.sum(partial_loss[i] * (
                                 Alphabet.embedding[Alphabet.mapping[Alphabet.padding]] - Alphabet.embedding[
                             Alphabet.mapping[s[i]]]))
