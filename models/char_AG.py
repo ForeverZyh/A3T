@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 import copy
 
-from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP
+from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP, TransformationDel, TransformationIns
 from DSL.Alphabet import Alphabet
 from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, Gradient
 
@@ -118,14 +118,14 @@ def adv_train(adv_model_file, load_weights=None):
         adv_batch_X = []
         arg_list = []
         for x, y in zip(batch_X, batch_Y):
-            arg_list.append((chars.to_string(x), y, 1))
+            arg_list.append((Alphabet.to_string(x, True), y, 1))
             # arg_list.append((chars.to_string(x), 1))
         rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
         # rets = MultiprocessingWithoutPipe.mapping(a.random_sample, arg_list, 8)
         for i, ret in enumerate(rets):
             # print(ret)
             # print(chars.to_string(batch_X[i]))
-            adv_batch_X.append(chars.to_ids(ret[0][0]))
+            adv_batch_X.append(Alphabet.to_ids(ret[0][0]))
         return np.array(adv_batch_X)
     
     if load_weights is not None:
