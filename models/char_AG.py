@@ -203,11 +203,10 @@ def test_model(saved_model_file, func=None):
         adv_batch_X = []
         arg_list = []
         for x, y in zip(batch_X, batch_Y):
-            arg_list.append((chars.to_string(x), y, 1))
+            arg_list.append((Alphabet.to_string(x, True), y, 1))
         rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
         for i, ret in enumerate(rets):
-            adv_batch_X.append(chars.to_ids(ret[0][0]))
-            assert np.sum(np.not_equal(adv_batch_X[i], batch_X[i])) <= 3
+            adv_batch_X.append(Alphabet.to_ids(ret[0][0]))
         return np.array(adv_batch_X)
     
     correct = 0
