@@ -2,9 +2,11 @@ import re
 import itertools
 import numpy as np
 import multiprocessing.connection
+from nltk import pos_tag
 
 from utils import tuple_set_union, Beam, UnorderedBeam
 from DSL.Alphabet import Alphabet
+
 
 
 class INS:
@@ -312,9 +314,10 @@ class SWAP:
 
 
 class SUB:
-    def __init__(self, phi, fun):
+    def __init__(self, phi, fun, add_fun=None):
         self.phi = phi
         self.fun = fun
+        self.add_fun = add_fun
         self.alphabet_acc = Alphabet.get_acc_alphabet(self.phi)
         self.alphabet_acc_set = set(self.alphabet_acc)
 
@@ -344,19 +347,24 @@ class SUB:
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
         if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
+            input_pos_tag = pos_tag(s)[input_pos][1]
             ret = Beam(1)
             tmp_ret = self.fun(s[input_pos])
-            for ss in tmp_ret:
-                if Alphabet.is_char_model:  # if character-level model
-                    new_output = output + ss
-                else:
-                    new_output = output + (ss,)
-                end_pos = min(len(new_output) - 1, input_pos)
-                score = np.sum(
-                    partial_loss[end_pos] * (
-                            Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
-                        Alphabet.mapping[s[end_pos]]]))
-                ret.add(new_output, score)
+            add_tmp_ret = None
+            if self.add_fun is not None:
+                add_tmp_ret = self.add_fun(s[input_pos])
+            for (i, ss) in enumerate(tmp_ret):
+                if add_tmp_ret is None or add_tmp_ret[i] == input_pos_tag:
+                    if Alphabet.is_char_model:  # if character-level model
+                        new_output = output + ss
+                    else:
+                        new_output = output + (ss,)
+                    end_pos = min(len(new_output) - 1, input_pos)
+                    score = np.sum(
+                        partial_loss[end_pos] * (
+                                Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
+                            Alphabet.mapping[s[end_pos]]]))
+                    ret.add(new_output, score)
             return {input_pos + 1: ret.check_balance()}
         else:
             return {}
