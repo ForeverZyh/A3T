@@ -21,7 +21,7 @@ dict_map = Glove.str2id
 Alphabet.set_alphabet(dict_map, Glove.embedding)
 keep_same = REGEX(r".*")
 sub = Transformation(keep_same,
-                     SUB(lambda c: c in SSTWordLevel.synonym_dict, lambda c: SSTWordLevel.synonym_dict[c]),
+                     SUB(lambda c: c in SSTWordLevel.synonym_dict, lambda c: SSTWordLevel.synonym_dict[c], lambda c: SSTWordLevel.synonym_dict_pos_tag[Glove.str2id[c]]),
                      keep_same)
 delete = Transformation(keep_same,
                      DEL(lambda c: c in ["a", "the", "and", "to", "of"]),
@@ -173,16 +173,18 @@ def adv_train(adv_model_file, load_weights=None):
         else:
             waiting = 0
             pre_loss = loss
+            model.adv_model.save_weights(filepath='./tmp/%s' % adv_model_file)
 
 #         model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epoch))
 
-    model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
+    #model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
 def test_model(saved_model_file, func=None):
     model = word_SST2()
     test_X = SSTWordLevel.test_X
     test_y = SSTWordLevel.test_y
+    testing_num = len(test_X)
     nb_classes = 2
     test_Y = to_categorical(test_y, nb_classes)
     dict_map = Glove.str2id
@@ -191,6 +193,19 @@ def test_model(saved_model_file, func=None):
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
     print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
+    model.adversarial_training()
+    Alphabet.partial_to_loss = model.partial_to_loss
+    
+    def adv_batch(batch_X, batch_Y):
+        adv_batch_X = []
+        arg_list = []
+        for x, y in zip(batch_X, batch_Y):
+            arg_list.append((Alphabet.to_string(x, remove_padding=True), y, 1))
+        rets = Multiprocessing.mapping(a.beam_search_adversarial, arg_list, 8, Alphabet.partial_to_loss)
+        for i, ret in enumerate(rets):
+            adv_batch_X.append(Alphabet.to_ids(ret[0][0]))
+        return np.array(adv_batch_X)
+
     
     correct = 0
     batch_size = 64
@@ -211,4 +226,14 @@ def test_model(saved_model_file, func=None):
         
         print("oracle acc: %.4f" % (correct * 100.0 / len(test_Y)))
     else:
-        raise(NotImplementedError("adv does not support yet!"))
+        adv_acc = 0 
+        for i in range(0, testing_num, batch_size):
+            if i % 100 == 0: print('\radversarial testing at %d/%d' % (i, testing_num), flush=True)
+            batch_X = test_X[i:min(testing_num, i + batch_size)]
+            batch_Y = test_Y[i:min(testing_num, i + batch_size)]
+            adv_batch_X = adv_batch(batch_X, batch_Y)
+            loss, acc = model.model.evaluate(adv_batch_X, batch_Y)
+            if i % 100 == 0: print(loss, acc)
+            adv_acc += acc * len(batch_X)
+
+        print("adv acc: %.4f" % (adv_acc * 1.0 / len(test_Y)))
