@@ -87,8 +87,8 @@ def train(filname):
     model = word_SST2()
     training_X = SSTWordLevel.training_X
     training_y = SSTWordLevel.training_y
-    val_X = SSTWordLevel.test_X
-    val_y = SSTWordLevel.test_y
+    val_X = SSTWordLevel.val_X
+    val_y = SSTWordLevel.val_y
     nb_classes = 2
     training_Y = to_categorical(training_y, nb_classes)
     val_Y = to_categorical(val_y, nb_classes)

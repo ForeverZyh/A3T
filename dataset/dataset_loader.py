@@ -141,6 +141,21 @@ class SSTWordLevel:
                 y.append(label)
                 
             return np.array(X), np.array(y)
+        
+        def prepare_ds(ds):
+            X = []
+            y = []
+            for features in ds:
+                features = features.strip()
+                sentence, label = features[2:], features[:1]
+                tokens = word_tokenize(sentence)
+                x = np.zeros(SSTWordLevel.max_len, dtype=np.int)
+                for (i, token) in enumerate(tokens):
+                    x[i] = Glove.get_word_id(token)
+                X.append(x)
+                y.append(int(label))
+                
+            return np.array(X), np.array(y)
 
         try:
             SSTWordLevel.training_X = np.load("./dataset/SST2/X_train.npy")
@@ -169,8 +184,7 @@ class SSTWordLevel:
             SSTWordLevel.test_y = np.load("./dataset/SST2/y_test.npy")
             print("Loading cached test dataset success!")
         except:
-            ds_test = tfds.load(name="glue/sst2", split="validation", shuffle_files=False)
-            SSTWordLevel.test_X, SSTWordLevel.test_y = prepare_ds(ds_test)
+            SSTWordLevel.test_X, SSTWordLevel.test_y = prepare_ds(open("./dataset/sst2test.txt").readlines())
             np.save("./dataset/SST2/X_test", SSTWordLevel.test_X)
             np.save("./dataset/SST2/y_test", SSTWordLevel.test_y)
             print("Loading test dataset success!")

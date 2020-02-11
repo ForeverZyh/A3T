@@ -35,7 +35,7 @@ class INS:
             else:  # if word-level model
                 new_output = output + (c,)
             end_pos = min(len(new_output) - 1, input_pos - 1)
-            if end_pos == len(new_output) - 1:
+            if end_pos == len(new_output) - 1 and end_pos < Alphabet.max_len:
                 score = np.sum(
                     partial_loss[end_pos] * (
                             Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
@@ -97,6 +97,7 @@ class DUP:
                 end_pos = min(len(new_output), input_pos + 1)
                 score = 0
                 for pos in range(pre_pos, end_pos):
+                    if pos >= Alphabet.max_len: continue
                     score += np.sum(
                         partial_loss[pos] * (
                                 Alphabet.embedding[Alphabet.mapping[new_output[pos]]] - Alphabet.embedding[
@@ -225,9 +226,10 @@ class REGEX:
                     new_output += (s[i - 1],)
                 if input_pos != len(output):
                     end_pos = min(len(new_output) - 1, i - 1)
-                    score += np.sum(partial_loss[end_pos] * (
-                            Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
-                        Alphabet.mapping[s[end_pos]]]))
+                    if end_pos < Alphabet.max_len:
+                        score += np.sum(partial_loss[end_pos] * (
+                                Alphabet.embedding[Alphabet.mapping[new_output[end_pos]]] - Alphabet.embedding[
+                            Alphabet.mapping[s[end_pos]]]))
             if not is_end or (is_end and i == len(s)):
                 if Alphabet.is_char_model:  # if character-level model
                     if self.is_any or self.regex.fullmatch(s[:i]):
