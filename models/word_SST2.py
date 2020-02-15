@@ -1,9 +1,10 @@
 import keras
-from keras.layers import Embedding, Input, Dense, Lambda, Conv1D, MaxPooling1D, Flatten, AveragePooling1D, Dropout
+from keras.layers import Embedding, Input, Dense, Lambda, Conv1D, MaxPooling1D, Flatten, AveragePooling1D, Dropout, MaxPooling1D
 from keras.models import Model
 from keras.utils import to_categorical
 import keras.backend as K
 from keras.losses import categorical_crossentropy
+from keras.optimizers import Adam, RMSprop
 import numpy as np
 import tensorflow as tf
 
@@ -29,8 +30,6 @@ delete = Transformation(keep_same,
 ins = Transformation(keep_same,
                      DUP(lambda c: True, lambda c: [c]),
                      keep_same)
-a = Composition(sub, ins, delete)
-# a = Composition(swap, sub)
 
 class word_SST2:
     def __init__(self):
@@ -45,13 +44,13 @@ class word_SST2:
         self.avgpooling = AveragePooling1D(5)
         x = self.avgpooling(x)
         x = Flatten()(x)
-        self.fc = Dense(2, activation='softmax')#, kernel_regularizer=keras.regularizers.l2(0.002))
+        self.fc = Dense(2, activation='softmax', kernel_regularizer=keras.regularizers.l2(0.001))
         self.logits = self.fc(x)
         self.model = Model(inputs=self.c, outputs=self.logits)
-        self.model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        self.model.compile(optimizer=Adam(learning_rate=0.0008), loss='categorical_crossentropy', metrics=['accuracy'])
         self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
                                                                       verbose=0, mode='auto',
-                                                                      baseline=None, restore_best_weights=False)
+                                                                      baseline=None, restore_best_weights=True)
         loss = Lambda(lambda x: categorical_crossentropy(x[0], x[1]))([self.y, self.logits])
         layer = Gradient(loss)
         partial = layer(look_up_c_d3)
@@ -80,7 +79,7 @@ class word_SST2:
         loss = loss_layer([self.adv_logits, self.logits])
         self.adv_model = Model(inputs=[self.c, self.adv, self.y], outputs=[loss])
         self.adv_model.add_loss(loss)
-        self.adv_model.compile(optimizer='Adam', loss=[None], loss_weights=[None])
+        self.adv_model.compile(optimizer=Adam(learning_rate=0.0008), loss=[None], loss_weights=[None])
 
 
 def train(filname):
@@ -95,12 +94,12 @@ def train(filname):
     dict_map = Glove.str2id
     Alphabet.set_alphabet(dict_map, Glove.embedding)
     
-    model.model.fit(x=training_X, y=training_Y, batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=1,
+    model.model.fit(x=training_X, y=training_Y, batch_size=128, epochs=30, callbacks=[model.early_stopping], verbose=1,
                     validation_data=(val_X, val_Y), shuffle=True)
     model.model.save_weights(filepath="./tmp/%s" % filname)
 
 
-def adv_train(adv_model_file, load_weights=None):
+def adv_train(adv_model_file, target_transformation, adv_train_random=False, load_weights=None):
     model = word_SST2()
     training_X = SSTWordLevel.training_X
     training_y = SSTWordLevel.training_y
@@ -115,7 +114,9 @@ def adv_train(adv_model_file, load_weights=None):
     training_num = len(training_X)
 
     model.adversarial_training()
-    Alphabet.partial_to_loss = model.partial_to_loss
+    a = eval(target_transformation)
+    if not adv_train_random:
+        Alphabet.partial_to_loss = model.partial_to_loss
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
@@ -177,10 +178,10 @@ def adv_train(adv_model_file, load_weights=None):
 
 #         model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epoch))
 
-    #model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
+#     model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
-def test_model(saved_model_file, func=None):
+def test_model(saved_model_file, func=None, target_transformation="None", test_only=False):
     model = word_SST2()
     test_X = SSTWordLevel.test_X
     test_y = SSTWordLevel.test_y
@@ -192,8 +193,11 @@ def test_model(saved_model_file, func=None):
     
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    if test_only:
+        return
     print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     model.adversarial_training()
+    a = eval(target_transformation)
     Alphabet.partial_to_loss = model.partial_to_loss
     
     def adv_batch(batch_X, batch_Y):

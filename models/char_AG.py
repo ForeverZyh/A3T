@@ -20,15 +20,10 @@ dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
 Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
 keep_same = REGEX(r".*")
 chars = Dict(dict_map)
-#     sub = Transformation(keep_same,
-#                          SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]),
-#                          keep_same)
-#     a = Composition(sub, sub, sub)
-sub = SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c])
-swap = SWAP(lambda c: True, lambda c: True)
-# a = Transformation(keep_same, sub, keep_same, sub, keep_same, sub, keep_same)
-a = Composition(Transformation(keep_same, swap, keep_same), Transformation(keep_same, sub, keep_same))
-
+sub = Transformation(keep_same, SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]), keep_same)
+swap = Transformation(keep_same, SWAP(lambda c: True, lambda c: True), keep_same)
+ins = TransformationIns()
+delete = TransformationDel()
 
 class char_AG:
     def __init__(self, all_voc_size=56, D=64):
@@ -50,7 +45,7 @@ class char_AG:
         self.fc3 = Dense(4, activation='softmax')
         self.logits = self.fc3(x)
         self.model = Model(inputs=self.c, outputs=self.logits)
-        self.model.compile(optimizer='RMSprop', loss='categorical_crossentropy', metrics=['accuracy'])
+        self.model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
         self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
                                                                       verbose=0, mode='auto',
                                                                       baseline=None, restore_best_weights=False)
@@ -84,7 +79,7 @@ class char_AG:
         loss = loss_layer([self.adv_logits, self.logits])
         self.adv_model = Model(inputs=[self.c, self.adv, self.y], outputs=[loss])
         self.adv_model.add_loss(loss)
-        self.adv_model.compile(optimizer='RMSprop', loss=[None], loss_weights=[None])
+        self.adv_model.compile(optimizer='Adam', loss=[None], loss_weights=[None])
 
 
 def train(filname):
@@ -99,7 +94,7 @@ def train(filname):
     model.model.save_weights(filepath="./tmp/%s" % filname)
 
 
-def adv_train(adv_model_file, load_weights=None):
+def adv_train(adv_model_file, target_transformation, adv_train_random=False, load_weights=None):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -108,11 +103,13 @@ def adv_train(adv_model_file, load_weights=None):
     training_Y = to_categorical(training_y, nb_classes)
     test_Y = to_categorical(test_y, nb_classes)
     training_num = len(training_X)
-
+    
     model = char_AG()
         
     model.adversarial_training()
-    Alphabet.partial_to_loss = model.partial_to_loss
+    a = eval(target_transformation)
+    if not adv_train_random:
+        Alphabet.partial_to_loss = model.partial_to_loss
 
     def adv_batch(batch_X, batch_Y):
         adv_batch_X = []
@@ -181,7 +178,7 @@ def adv_train(adv_model_file, load_weights=None):
     model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
-def test_model(saved_model_file, func=None):
+def test_model(saved_model_file, func=None, target_transformation="None", test_only=False):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -195,8 +192,11 @@ def test_model(saved_model_file, func=None):
     model = char_AG()
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    if test_only:
+        return
     print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     model.adversarial_training()
+    a = eval(target_transformation)
     Alphabet.partial_to_loss = model.partial_to_loss
     
     def adv_batch(batch_X, batch_Y):
