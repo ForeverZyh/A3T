@@ -1,6 +1,6 @@
-#Robustness to Programmable String Transformations via Augmented Abstract Training
+# Robustness to Programmable String Transformations via Augmented Abstract Training
 
-##Overview
+## Overview
 
 This repository contains the code implementation of the paper *Robustness to Programmable String Transformations via Augmented Abstract Training*.
 
