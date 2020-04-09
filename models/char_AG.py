@@ -48,7 +48,7 @@ class char_AG:
         self.model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
         self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
                                                                       verbose=0, mode='auto',
-                                                                      baseline=None, restore_best_weights=False)
+                                                                      baseline=None, restore_best_weights=True)
         loss = Lambda(lambda x: categorical_crossentropy(x[0], x[1]))([self.y, self.logits])
         layer = Gradient(loss)
         partial = layer(look_up_c_d3)
@@ -172,10 +172,11 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
         else:
             waiting = 0
             pre_loss = loss
+            model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 #         model.adv_model.save_weights(filepath="./tmp/%s_epoch%d" % (adv_model_file, epoch))
 
-    model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
+   # model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
 def test_model(saved_model_file, func=None, target_transformation="None", test_only=False):
