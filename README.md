@@ -79,7 +79,7 @@ And we show some examples of training and evluating the models.
 ```bash
 python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='ins' -r 0.005
 test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --adv-test=True --transform='Composition(ins, sub)'
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --text-func='DelDupSubChar(0,1,1,d)'
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --test-func='DelDupSubChar(0,1,1,d)'
 ```
 
 - The following code segment does A3T(search) training on SST2 dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{DelStop}, 2), (T_{SubSyn}, 2)\}$.
@@ -87,6 +87,6 @@ test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --t
 ```bash
 python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(2,0,0,d)' -r 0.005
 test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 --test-size=1821 --adv-test=True --transform='Composition(delete, delete, sub, sub)'
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 --test-size=1821 --text-func='DelDupSubWord(2,0,2,d)
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 --test-size=1821 --test-func='DelDupSubWord(2,0,2,d)
 ```
 
