@@ -4,6 +4,7 @@ from keras.models import Model
 from keras.utils import to_categorical
 import keras.backend as K
 from keras.losses import categorical_crossentropy
+from keras.optimizers import Adam, RMSprop
 import numpy as np
 import tensorflow as tf
 import copy
@@ -26,7 +27,7 @@ ins = TransformationIns()
 delete = TransformationDel()
 
 class char_AG:
-    def __init__(self, all_voc_size=56, D=64):
+    def __init__(self, lr=0.0016, all_voc_size=56, D=64):
         self.all_voc_size = all_voc_size
         self.D = D
         self.c = Input(shape=(300,), dtype='int32')
@@ -34,18 +35,19 @@ class char_AG:
         self.embed = Embedding(self.all_voc_size, self.D, name="embedding")
         look_up_c_d3 = self.embed(self.c)
         self.conv1d = Conv1D(64, 10, activation="relu")
+        self.lr = lr
         x = self.conv1d(look_up_c_d3)
         self.avgpooling = AveragePooling1D(10)
         x = self.avgpooling(x)
         x = Flatten()(x)
-        self.fc1 = Dense(64, activation='relu')
+        self.fc1 = Dense(64, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001))
         x = self.fc1(x)
-        self.fc2 = Dense(64, activation='relu')
+        self.fc2 = Dense(64, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001))
         x = self.fc2(x)
-        self.fc3 = Dense(4, activation='softmax')
+        self.fc3 = Dense(4, activation='softmax', kernel_regularizer=keras.regularizers.l2(0.001))
         self.logits = self.fc3(x)
         self.model = Model(inputs=self.c, outputs=self.logits)
-        self.model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        self.model.compile(optimizer=Adam(learning_rate=self.lr), loss='categorical_crossentropy', metrics=['accuracy'])
         self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
                                                                       verbose=0, mode='auto',
                                                                       baseline=None, restore_best_weights=True)
@@ -79,19 +81,25 @@ class char_AG:
         loss = loss_layer([self.adv_logits, self.logits])
         self.adv_model = Model(inputs=[self.c, self.adv, self.y], outputs=[loss])
         self.adv_model.add_loss(loss)
-        self.adv_model.compile(optimizer='Adam', loss=[None], loss_weights=[None])
+        self.adv_model.compile(optimizer=Adam(learning_rate=self.lr), loss=[None], loss_weights=[None])
 
 
-def train(filname):
+def train(filname, lr=0.0016):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
+    test_X = np.load("./dataset/AG/X_test.npy")
+    test_y = np.load("./dataset/AG/y_test.npy")
     nb_classes = 4
     training_Y = to_categorical(training_y, nb_classes)
-    held_out = 1000
-    model = char_AG()
+    test_Y = to_categorical(test_y, nb_classes)
+    held_out = 4000
+    model = char_AG(lr=lr)
     model.model.fit(x=training_X[held_out:], y=training_Y[held_out:], batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
                     validation_data=(training_X[:held_out], training_Y[:held_out]), shuffle=True)
     model.model.save_weights(filepath="./tmp/%s" % filname)
+    normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
+    return normal_loss, normal_acc
 
 
 def adv_train(adv_model_file, target_transformation, adv_train_random=False, load_weights=None):
@@ -143,7 +151,7 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     pre_loss = 1e20
     patience = 5
     waiting = 0
-    held_out = 1000
+    held_out = 4000
     for epoch in range(starting_epoch, epochs):
         print("epoch %d:" % epoch)
         for i in range(held_out, training_num, batch_size):
@@ -193,9 +201,9 @@ def test_model(saved_model_file, func=None, target_transformation="None", test_o
     model = char_AG()
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     if test_only:
         return
-    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     model.adversarial_training()
     a = eval(target_transformation)
     Alphabet.partial_to_loss = model.partial_to_loss
