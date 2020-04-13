@@ -349,12 +349,15 @@ class SUB:
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
         if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
-            input_pos_tag = pos_tag(s)[input_pos][1]
+            #input_pos_tag = pos_tag(s)[input_pos][1]
             ret = Beam(1)
             tmp_ret = self.fun(s[input_pos])
             add_tmp_ret = None
             if self.add_fun is not None:
                 add_tmp_ret = self.add_fun(s[input_pos])
+                input_pos_tag = pos_tag(s)[input_pos][1]
+            else:
+                input_pos_tag = None
             for (i, ss) in enumerate(tmp_ret):
                 if add_tmp_ret is None or add_tmp_ret[i] == input_pos_tag:
                     if Alphabet.is_char_model:  # if character-level model
