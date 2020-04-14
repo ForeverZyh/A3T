@@ -24,7 +24,7 @@ pip install -r requirements.txt
 cd ..
 pip install tensorflow-gpu==1.13.1
 pip install keras
-pip install tensorflow-datasets
+pip install tensorflow-datasets==1.3.2
 pip install nltk
 ```
 
