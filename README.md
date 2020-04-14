@@ -25,13 +25,14 @@ cd ..
 pip install tensorflow-gpu==1.13.1
 pip install keras
 pip install tensorflow-datasets
+pip install nltk
 ```
 
 Sometimes you may need to downgrade `numpy` to 1.16.1 or `Pillow` to 6.1.0 by
 
 ```bash
 pip uninstall numpy && pip install numpy==1.16.1
-pip uninstall Pillow && pip uninstall Pillow==6.1.0
+pip uninstall Pillow && pip install Pillow==6.1.0
 ```
 
 
