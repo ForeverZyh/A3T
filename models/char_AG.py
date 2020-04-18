@@ -27,7 +27,7 @@ ins = TransformationIns()
 delete = TransformationDel()
 
 class char_AG:
-    def __init__(self, lr=0.0016, all_voc_size=56, D=64):
+    def __init__(self, lr=0.0011, all_voc_size=56, D=64):
         self.all_voc_size = all_voc_size
         self.D = D
         self.c = Input(shape=(300,), dtype='int32')
@@ -40,11 +40,11 @@ class char_AG:
         self.avgpooling = AveragePooling1D(10)
         x = self.avgpooling(x)
         x = Flatten()(x)
-        self.fc1 = Dense(64, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001))
+        self.fc1 = Dense(64, activation='relu')#, kernel_regularizer=keras.regularizers.l2(0.001))
         x = self.fc1(x)
-        self.fc2 = Dense(64, activation='relu', kernel_regularizer=keras.regularizers.l2(0.001))
+        self.fc2 = Dense(64, activation='relu')#, kernel_regularizer=keras.regularizers.l2(0.001))
         x = self.fc2(x)
-        self.fc3 = Dense(4, activation='softmax', kernel_regularizer=keras.regularizers.l2(0.001))
+        self.fc3 = Dense(4, activation='softmax')#, kernel_regularizer=keras.regularizers.l2(0.001))
         self.logits = self.fc3(x)
         self.model = Model(inputs=self.c, outputs=self.logits)
         self.model.compile(optimizer=Adam(learning_rate=self.lr), loss='categorical_crossentropy', metrics=['accuracy'])
@@ -152,7 +152,12 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     patience = 5
     waiting = 0
     held_out = 4000
+    ids = np.arange(held_out, training_num)
     for epoch in range(starting_epoch, epochs):
+        np.random.shuffle(ids)
+        ids_held_out = np.append(np.arange(held_out), ids)
+        training_X = training_X[ids_held_out]
+        training_Y = training_Y[ids_held_out]
         print("epoch %d:" % epoch)
         for i in range(held_out, training_num, batch_size):
             if i % 100 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
@@ -175,7 +180,7 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
         print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
         if loss > pre_loss:
             waiting += 1
-            if waiting > patience:
+            if waiting >= patience:
                 break
         else:
             waiting = 0
