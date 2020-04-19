@@ -32,7 +32,7 @@ ins = Transformation(keep_same,
                      keep_same)
 
 class word_SST2:
-    def __init__(self):
+    def __init__(self, lr=0.0004):
         self.c = Input(shape=(SSTWordLevel.max_len,), dtype='int32')
         self.y = Input(shape=(2,), dtype='float32')
         self.all_voc_size, self.D = Glove.embedding.shape
@@ -44,11 +44,12 @@ class word_SST2:
         self.avgpooling = AveragePooling1D(5)
         x = self.avgpooling(x)
         x = Flatten()(x)
-        self.fc = Dense(2, activation='softmax', kernel_regularizer=keras.regularizers.l2(0.001))
+        self.fc = Dense(2, activation='softmax')#, kernel_regularizer=keras.regularizers.l2(0.001))
         self.logits = self.fc(x)
         self.model = Model(inputs=self.c, outputs=self.logits)
-        self.model.compile(optimizer=Adam(learning_rate=0.0008), loss='categorical_crossentropy', metrics=['accuracy'])
-        self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
+        self.lr = lr
+        self.model.compile(optimizer=Adam(learning_rate=self.lr), loss='categorical_crossentropy', metrics=['accuracy'])
+        self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_accuracy', min_delta=0, patience=5,
                                                                       verbose=0, mode='auto',
                                                                       baseline=None, restore_best_weights=True)
         loss = Lambda(lambda x: categorical_crossentropy(x[0], x[1]))([self.y, self.logits])
@@ -79,17 +80,20 @@ class word_SST2:
         loss = loss_layer([self.adv_logits, self.logits])
         self.adv_model = Model(inputs=[self.c, self.adv, self.y], outputs=[loss])
         self.adv_model.add_loss(loss)
-        self.adv_model.compile(optimizer=Adam(learning_rate=0.0008), loss=[None], loss_weights=[None])
+        self.adv_model.compile(optimizer=Adam(learning_rate=self.lr), loss=[None], loss_weights=[None])
 
 
-def train(filname):
-    model = word_SST2()
+def train(filname, lr=0.0004):
+    model = word_SST2(lr)
     training_X = SSTWordLevel.training_X
     training_y = SSTWordLevel.training_y
     val_X = SSTWordLevel.val_X
     val_y = SSTWordLevel.val_y
+    test_X = SSTWordLevel.test_X
+    test_y = SSTWordLevel.test_y
     nb_classes = 2
     training_Y = to_categorical(training_y, nb_classes)
+    test_Y = to_categorical(test_y, nb_classes)
     val_Y = to_categorical(val_y, nb_classes)
     dict_map = Glove.str2id
     Alphabet.set_alphabet(dict_map, Glove.embedding)
@@ -97,6 +101,9 @@ def train(filname):
     model.model.fit(x=training_X, y=training_Y, batch_size=128, epochs=30, callbacks=[model.early_stopping], verbose=1,
                     validation_data=(val_X, val_Y), shuffle=True)
     model.model.save_weights(filepath="./tmp/%s" % filname)
+    normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
+    return normal_loss, normal_acc
 
 
 def adv_train(adv_model_file, target_transformation, adv_train_random=False, load_weights=None):
@@ -148,8 +155,12 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     pre_loss = 1e20
     patience = 5
     waiting = 0
+    ids = np.arange(training_num)
     for epoch in range(starting_epoch, epochs):
         print("epoch %d:" % epoch)
+        np.random.shuffle(ids)
+        training_X = training_X[ids]
+        training_Y = training_Y[ids]
         for i in range(0, training_num, batch_size):
             if i % 100 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
             batch_X = training_X[i:min(training_num, i + batch_size)]
@@ -169,7 +180,7 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
         print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
         if loss > pre_loss:
             waiting += 1
-            if waiting > patience:
+            if waiting >= patience:
                 break
         else:
             waiting = 0
