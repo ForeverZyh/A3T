@@ -204,9 +204,9 @@ def test_model(saved_model_file, func=None, target_transformation="None", test_o
     
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
+    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     if test_only:
         return
-    print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
     model.adversarial_training()
     a = eval(target_transformation)
     Alphabet.partial_to_loss = model.partial_to_loss

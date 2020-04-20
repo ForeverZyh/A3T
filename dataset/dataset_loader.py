@@ -56,7 +56,101 @@ class Glove:
         np.save("./dataset/glove_dict", Glove.str2id)
         print("Loading glove embedding success!")
 
+        
+class SSTCharLevel:
+    training_X = []
+    training_y = []
+    test_X = []
+    test_y = []
+    val_X = []
+    val_y = []
+    synonym_dict = {}
+    synonym_dict_id = {}
+    synonym_dict_pos_tag = {}
+    max_len = 268
+    is_built = False
+    dict_map = {" ": 0}
 
+    @staticmethod
+    def map(c):
+        if c not in SSTCharLevel.dict_map:
+            SSTCharLevel.dict_map[c] = len(SSTCharLevel.dict_map)
+
+        return SSTCharLevel.dict_map[c]
+
+    @staticmethod
+    def build():
+        if SSTCharLevel.is_built:    # make sure it will only be built once
+            return
+        SSTCharLevel.is_built = True
+
+        def prepare_ds(ds):
+            X = []
+            y = []
+            for features in tfds.as_numpy(ds):
+                sentence, label = features["sentence"], features["label"]
+                sentence = sentence.decode('UTF-8')
+                x = np.zeros(SSTCharLevel.max_len, dtype=np.int)
+                for (i, c) in enumerate(sentence):
+                    x[i] = SSTCharLevel.map(c)
+                X.append(x)
+                y.append(label)
+                
+            return np.array(X), np.array(y)
+        
+        def prepare_test_ds(ds):
+            X = []
+            y = []
+            for features in ds:
+                features = features.strip()
+                sentence, label = features[2:], features[:1]
+                x = np.zeros(SSTCharLevel.max_len, dtype=np.int)
+                for (i, c) in enumerate(sentence):
+                    x[i] = SSTCharLevel.map(c)
+                X.append(x)
+                y.append(int(label))
+                
+            return np.array(X), np.array(y)
+
+        try:
+            SSTCharLevel.training_X = np.load("./dataset/SST2char/X_train.npy")
+            SSTCharLevel.training_y = np.load("./dataset/SST2char/y_train.npy")
+            print("Loading cached training dataset success!")
+        except:
+            ds_train = tfds.load(name="glue/sst2", split="train", shuffle_files=False)
+            SSTCharLevel.training_X, SSTCharLevel.training_y = prepare_ds(ds_train)
+            np.save("./dataset/SST2char/X_train", SSTCharLevel.training_X)
+            np.save("./dataset/SST2char/y_train", SSTCharLevel.training_y)
+            print("Loading training dataset success!")
+
+        try:
+            SSTCharLevel.val_X = np.load("./dataset/SST2char/X_val.npy")
+            SSTCharLevel.val_y = np.load("./dataset/SST2char/y_val.npy")
+            print("Loading cached validation dataset success!")
+        except:
+            ds_val = tfds.load(name="glue/sst2", split="validation", shuffle_files=False)
+            SSTCharLevel.val_X, SSTCharLevel.val_y = prepare_ds(ds_val)
+            np.save("./dataset/SST2char/X_val", SSTCharLevel.val_X)
+            np.save("./dataset/SST2char/y_val", SSTCharLevel.val_y)
+            print("Loading validation dataset success!")
+
+        try:
+            SSTCharLevel.test_X = np.load("./dataset/SST2char/X_test.npy")
+            SSTCharLevel.test_y = np.load("./dataset/SST2char/y_test.npy")
+            print("Loading cached test dataset success!")
+        except:
+            SSTCharLevel.test_X, SSTCharLevel.test_y = prepare_test_ds(open("./dataset/sst2test.txt").readlines())
+            np.save("./dataset/SST2char/X_test", SSTCharLevel.test_X)
+            np.save("./dataset/SST2char/y_test", SSTCharLevel.test_y)
+            print("Loading test dataset success!")
+        
+        try:
+            SSTCharLevel.dict_map = dict(np.load("./dataset/SST2char/dict_map.npy").item())
+        except:
+            np.save("./dataset/SST2char/dict_map", SSTCharLevel.dict_map)
+        
+            
+            
 class SSTWordLevel:
     training_X = []
     training_y = []
@@ -142,7 +236,7 @@ class SSTWordLevel:
                 
             return np.array(X), np.array(y)
         
-        def prepare_ds(ds):
+        def prepare_test_ds(ds):
             X = []
             y = []
             for features in ds:
@@ -184,7 +278,7 @@ class SSTWordLevel:
             SSTWordLevel.test_y = np.load("./dataset/SST2/y_test.npy")
             print("Loading cached test dataset success!")
         except:
-            SSTWordLevel.test_X, SSTWordLevel.test_y = prepare_ds(open("./dataset/sst2test.txt").readlines())
+            SSTWordLevel.test_X, SSTWordLevel.test_y = prepare_test_ds(open("./dataset/sst2test.txt").readlines())
             np.save("./dataset/SST2/X_test", SSTWordLevel.test_X)
             np.save("./dataset/SST2/y_test", SSTWordLevel.test_y)
             print("Loading test dataset success!")
