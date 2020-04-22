@@ -84,7 +84,7 @@ class char_AG:
         self.adv_model.compile(optimizer=Adam(learning_rate=self.lr), loss=[None], loss_weights=[None])
 
 
-def train(filname, lr=0.0016):
+def train(filname, lr=0.0011):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
