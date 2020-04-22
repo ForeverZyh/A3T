@@ -20,7 +20,7 @@ def openfile(filename):
         precent = 0
         for row in csv_reader:
             y.append(int(row[0]) - 1)
-            s = row[1] + row[2]
+            s = row[1] + " " + row[2]
             s = s.lower()
             ave += len(s)
             cnt = 0
@@ -34,8 +34,9 @@ def openfile(filename):
                     x[cnt] = map(c)
                     cnt += 1
                 else:
-                    x[cnt] = 0
-                    cnt += 1
+                    if cnt > 0 and x[cnt - 1] != 0:
+                        x[cnt] = 0
+                        cnt += 1
             X.append(x)
 
         print(ave * 1.0 / len(y), precent * 1.0 / len(y))

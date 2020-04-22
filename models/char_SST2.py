@@ -9,17 +9,20 @@ import numpy as np
 import tensorflow as tf
 import copy
 
+from dataset.dataset_loader import SSTCharLevel
 from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP, TransformationDel, TransformationIns
 from DSL.Alphabet import Alphabet
-from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, Gradient
+from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, Gradient, compute_adjacent_keys
+import diffai.scheduling as S
 
 
+SSTCharLevel.build() # this should be called first 
 Alphabet.set_char_model()
-Alphabet.max_len = 300
+Alphabet.max_len = SSTCharLevel.max_len
 Alphabet.padding = " "
-dict_map = dict(np.load("./dataset/AG/dict_map.npy").item())
+dict_map = SSTCharLevel.dict_map
+Alphabet.set_alphabet(dict_map, np.zeros((71, 150)))
 S.Info.adjacent_keys = compute_adjacent_keys(dict_map)
-Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
 keep_same = REGEX(r".*")
 chars = Dict(dict_map)
 sub = Transformation(keep_same, SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]), keep_same)
@@ -27,29 +30,25 @@ swap = Transformation(keep_same, SWAP(lambda c: True, lambda c: True), keep_same
 ins = TransformationIns()
 delete = TransformationDel()
 
-class char_AG:
-    def __init__(self, lr=0.0011, all_voc_size=56, D=64):
+class char_SST2:
+    def __init__(self, lr=0.0009, all_voc_size=71, D=150):
         self.all_voc_size = all_voc_size
         self.D = D
-        self.c = Input(shape=(300,), dtype='int32')
-        self.y = Input(shape=(4,), dtype='float32')
+        self.c = Input(shape=(Alphabet.max_len,), dtype='int32')
+        self.y = Input(shape=(2,), dtype='float32')
         self.embed = Embedding(self.all_voc_size, self.D, name="embedding")
         look_up_c_d3 = self.embed(self.c)
-        self.conv1d = Conv1D(64, 10, activation="relu")
+        self.conv1d = Conv1D(100, 5, activation="relu")
         self.lr = lr
         x = self.conv1d(look_up_c_d3)
-        self.avgpooling = AveragePooling1D(10)
+        self.avgpooling = AveragePooling1D(5)
         x = self.avgpooling(x)
         x = Flatten()(x)
-        self.fc1 = Dense(64, activation='relu')#, kernel_regularizer=keras.regularizers.l2(0.001))
-        x = self.fc1(x)
-        self.fc2 = Dense(64, activation='relu')#, kernel_regularizer=keras.regularizers.l2(0.001))
-        x = self.fc2(x)
-        self.fc3 = Dense(4, activation='softmax')#, kernel_regularizer=keras.regularizers.l2(0.001))
+        self.fc3 = Dense(2, activation='softmax')#, kernel_regularizer=keras.regularizers.l2(0.001))
         self.logits = self.fc3(x)
         self.model = Model(inputs=self.c, outputs=self.logits)
         self.model.compile(optimizer=Adam(learning_rate=self.lr), loss='categorical_crossentropy', metrics=['accuracy'])
-        self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
+        self.early_stopping = keras.callbacks.callbacks.EarlyStopping(monitor='val_accuracy', min_delta=0, patience=5,
                                                                       verbose=0, mode='auto',
                                                                       baseline=None, restore_best_weights=True)
         loss = Lambda(lambda x: categorical_crossentropy(x[0], x[1]))([self.y, self.logits])
@@ -69,13 +68,11 @@ class char_AG:
         self.partial_to_loss = lambda_partial
 
     def adversarial_training(self):
-        self.adv = Input(shape=(300,), dtype='int32')
+        self.adv = Input(shape=(Alphabet.max_len,), dtype='int32')
         look_up_c = self.embed(self.adv)
         x = self.conv1d(look_up_c)
         x = self.avgpooling(x)
         x = Flatten()(x)
-        x = self.fc1(x)
-        x = self.fc2(x)
         self.adv_logits = self.fc3(x)
         loss_layer = Lambda(lambda x: K.mean(
             categorical_crossentropy(self.y, x[0]) * 0.5 + categorical_crossentropy(self.y, x[1]) * 0.5))
@@ -85,18 +82,20 @@ class char_AG:
         self.adv_model.compile(optimizer=Adam(learning_rate=self.lr), loss=[None], loss_weights=[None])
 
 
-def train(filname, lr=0.0016):
-    training_X = np.load("./dataset/AG/X_train.npy")
-    training_y = np.load("./dataset/AG/y_train.npy")
-    test_X = np.load("./dataset/AG/X_test.npy")
-    test_y = np.load("./dataset/AG/y_test.npy")
-    nb_classes = 4
+def train(filname, lr=0.0009):
+    training_X = SSTCharLevel.training_X
+    training_y = SSTCharLevel.training_y
+    val_X = SSTCharLevel.val_X
+    val_y = SSTCharLevel.val_y
+    test_X = SSTCharLevel.test_X
+    test_y = SSTCharLevel.test_y
+    nb_classes = 2
+    val_Y = to_categorical(val_y, nb_classes)
     training_Y = to_categorical(training_y, nb_classes)
     test_Y = to_categorical(test_y, nb_classes)
-    held_out = 4000
-    model = char_AG(lr=lr)
-    model.model.fit(x=training_X[held_out:], y=training_Y[held_out:], batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
-                    validation_data=(training_X[:held_out], training_Y[:held_out]), shuffle=True)
+    model = char_SST2(lr=lr)
+    model.model.fit(x=training_X, y=training_Y, batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
+                    validation_data=(val_X, val_Y), shuffle=True)
     model.model.save_weights(filepath="./tmp/%s" % filname)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
     print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
@@ -104,16 +103,19 @@ def train(filname, lr=0.0016):
 
 
 def adv_train(adv_model_file, target_transformation, adv_train_random=False, load_weights=None):
-    training_X = np.load("./dataset/AG/X_train.npy")
-    training_y = np.load("./dataset/AG/y_train.npy")
-    test_X = np.load("./dataset/AG/X_test.npy")
-    test_y = np.load("./dataset/AG/y_test.npy")
-    nb_classes = 4
+    training_X = SSTCharLevel.training_X
+    training_y = SSTCharLevel.training_y
+    val_X = SSTCharLevel.val_X
+    val_y = SSTCharLevel.val_y
+    test_X = SSTCharLevel.test_X
+    test_y = SSTCharLevel.test_y
+    nb_classes = 2
+    val_Y = to_categorical(val_y, nb_classes)
     training_Y = to_categorical(training_y, nb_classes)
     test_Y = to_categorical(test_y, nb_classes)
     training_num = len(training_X)
     
-    model = char_AG()
+    model = char_SST2()
         
     model.adversarial_training()
     a = eval(target_transformation)
@@ -152,29 +154,27 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     pre_loss = 1e20
     patience = 5
     waiting = 0
-    held_out = 4000
-    ids = np.arange(held_out, training_num)
+    ids = np.arange(training_num)
     for epoch in range(starting_epoch, epochs):
         np.random.shuffle(ids)
-        ids_held_out = np.append(np.arange(held_out), ids)
-        training_X = training_X[ids_held_out]
-        training_Y = training_Y[ids_held_out]
+        training_X = training_X[ids]
+        training_Y = training_Y[ids]
         print("epoch %d:" % epoch)
-        for i in range(held_out, training_num, batch_size):
-            if i % 100 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
+        for i in range(0, training_num, batch_size):
+            if i % 500 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
             batch_X = training_X[i:min(training_num, i + batch_size)]
             batch_Y = training_Y[i:min(training_num, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]
             adv_batch_X = adv_batch(batch_X, batch_Y)
-            if i % 100 == 0:
+            if i % 500 == 0:
                 print(model.model.evaluate(batch_X, batch_Y))
                 print(model.model.evaluate(adv_batch_X, batch_Y))
                 # print(model.adv_model.evaluate(x=[batch_X, adv_batch_X, batch_Y], y=[]))
             model.adv_model.train_on_batch(x=[batch_X, adv_batch_X, batch_Y], y=[])
 
         Alphabet.embedding = model.embed.get_weights()[0]
-        adv_batch_X = adv_batch(training_X[:held_out], training_Y[:held_out])
-        loss = model.adv_model.evaluate(x=[training_X[:held_out], adv_batch_X, training_Y[:held_out]], y=[],
+        adv_batch_X = adv_batch(val_X, val_Y)
+        loss = model.adv_model.evaluate(x=[val_X, adv_batch_X, val_Y], y=[],
                                         batch_size=64)
         print("adv loss: %.4f" % loss)
         normal_loss, normal_acc = model.model.evaluate(x=test_X, y=test_Y, batch_size=64)
@@ -194,17 +194,17 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
 
 
 def test_model(saved_model_file, func=None, target_transformation="None", test_only=False):
-    training_X = np.load("./dataset/AG/X_train.npy")
-    training_y = np.load("./dataset/AG/y_train.npy")
-    test_X = np.load("./dataset/AG/X_test.npy")
-    test_y = np.load("./dataset/AG/y_test.npy")
-    nb_classes = 4
+    training_X = SSTCharLevel.training_X
+    training_y = SSTCharLevel.training_y
+    test_X = SSTCharLevel.test_X
+    test_y = SSTCharLevel.test_y
+    nb_classes = 2
     training_Y = to_categorical(training_y, nb_classes)
     test_Y = to_categorical(test_y, nb_classes)
     training_num = len(training_X)
     testing_num = len(test_X)
 
-    model = char_AG()
+    model = char_SST2()
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
     print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
