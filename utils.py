@@ -216,3 +216,15 @@ def swap_pytorch(x, p1, p2):
     z = x[p1].clone()
     x[p1] = x[p2]
     x[p2] = z
+    
+def compute_adjacent_keys(dict_map):
+    lines = open("./dataset/en.key").readlines()
+    adjacent_keys = [[] for i in range(len(dict_map))]
+    for line in lines:
+        tmp = line.strip().split()
+        ret = set(tmp[1:]).intersection(dict_map.keys())
+        ids = []
+        for x in ret:
+            ids.append(dict_map[x])
+        adjacent_keys[dict_map[tmp[0]]].extend(ids)
+    return adjacent_keys
