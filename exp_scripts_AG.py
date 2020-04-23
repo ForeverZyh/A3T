@@ -1,5 +1,5 @@
 from models.char_AG import train as AG_train
-from models.char_AG import test_model as AG_test_modqel
+from models.char_AG import test_model as AG_test_model
 from models.char_AG import adv_train as AG_adv_train
 from diffai.exhaustive import SwapSub, DelDupSubWord, DelDupSubChar
 from functools import partial

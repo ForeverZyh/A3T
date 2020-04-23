@@ -1,5 +1,5 @@
 from models.char_SST2 import train as SST2_train
-from models.char_SST2 import test_model as SST2_test_modqel
+from models.char_SST2 import test_model as SST2_test_model
 from models.char_SST2 import adv_train as SST2_adv_train
 from diffai.exhaustive import SwapSub, DelDupSubWord, DelDupSubChar
 from functools import partial

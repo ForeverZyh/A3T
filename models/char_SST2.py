@@ -149,7 +149,7 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     else:
         starting_epoch = 0
         
-    epochs = 30
+    epochs = 20
     batch_size = 64
     pre_loss = 1e20
     patience = 5
@@ -174,8 +174,11 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
 
         Alphabet.embedding = model.embed.get_weights()[0]
         adv_batch_X = adv_batch(val_X, val_Y)
-        loss = model.adv_model.evaluate(x=[val_X, adv_batch_X, val_Y], y=[],
-                                        batch_size=64)
+        #loss = model.adv_model.evaluate(x=[val_X, adv_batch_X, val_Y], y=[],
+        #                                batch_size=64)
+        _, acc0 = model.model.evaluate(x=val_X, y=val_Y, batch_size=64)
+        _, acc1 = model.model.evaluate(x=adv_batch_X, y=val_Y, batch_size=64)
+        loss = - acc0 - acc1
         print("adv loss: %.4f" % loss)
         normal_loss, normal_acc = model.model.evaluate(x=test_X, y=test_Y, batch_size=64)
         print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
