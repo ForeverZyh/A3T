@@ -707,8 +707,8 @@ class TransformationDel(Transformation):
         delete_pos.sort(key=lambda x:-sum_suffix[x])
         for i in range(min(b, len(delete_pos))):
             pos = delete_pos[i]
-            if sum_suffix[pos] < 0:
-                break
+            #if sum_suffix[pos] < 0:
+            #    break
             true_ret.add(s[:pos] + s[pos + 1:], sum_suffix[pos])
             
         return true_ret.check_balance()
@@ -774,8 +774,8 @@ class TransformationIns(Transformation):
         ins_pos.sort(key=lambda x:-cost[x])
         for i in range(min(b, len(ins_pos))):
             pos = ins_pos[i]
-            if cost[pos] < 0:
-                break
+            #if cost[pos] < 0:
+            #    break
             t = list(Alphabet.adjacent_keys[s[pos]])[0]
             true_ret.add((s[:pos + 1] + t + s[pos + 1:])[:Alphabet.max_len], cost[pos])
             
