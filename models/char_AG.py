@@ -11,7 +11,8 @@ import copy
 
 from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP, TransformationDel, TransformationIns
 from DSL.Alphabet import Alphabet
-from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, Gradient
+import diffai.scheduling as S
+from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, Gradient, compute_adjacent_keys
 
 
 Alphabet.set_char_model()
@@ -28,7 +29,7 @@ ins = TransformationIns()
 delete = TransformationDel()
 
 class char_AG:
-    def __init__(self, lr=0.0011, all_voc_size=56, D=64):
+    def __init__(self, lr=0.0009, all_voc_size=56, D=64):
         self.all_voc_size = all_voc_size
         self.D = D
         self.c = Input(shape=(300,), dtype='int32')
@@ -85,7 +86,7 @@ class char_AG:
         self.adv_model.compile(optimizer=Adam(learning_rate=self.lr), loss=[None], loss_weights=[None])
 
 
-def train(filname, lr=0.0011):
+def train(filname, lr=0.0009):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -147,7 +148,7 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     else:
         starting_epoch = 0
         
-    epochs = 30
+    epochs = 20
     batch_size = 64
     pre_loss = 1e20
     patience = 5
@@ -161,12 +162,12 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
         training_Y = training_Y[ids_held_out]
         print("epoch %d:" % epoch)
         for i in range(held_out, training_num, batch_size):
-            if i % 100 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
+            if i % 10000 == 0: print('\radversarial training at %d/%d' % (i, training_num), flush=True)
             batch_X = training_X[i:min(training_num, i + batch_size)]
             batch_Y = training_Y[i:min(training_num, i + batch_size)]
             Alphabet.embedding = model.embed.get_weights()[0]
             adv_batch_X = adv_batch(batch_X, batch_Y)
-            if i % 100 == 0:
+            if i % 10000 == 0:
                 print(model.model.evaluate(batch_X, batch_Y))
                 print(model.model.evaluate(adv_batch_X, batch_Y))
                 # print(model.adv_model.evaluate(x=[batch_X, adv_batch_X, batch_Y], y=[]))
