@@ -4,9 +4,8 @@ import numpy as np
 import multiprocessing.connection
 from nltk import pos_tag
 
-from utils import tuple_set_union, Beam, UnorderedBeam
+from utils import tuple_set_union, Beam, UnorderedBeam, inf
 from DSL.Alphabet import Alphabet
-
 
 
 class INS:
@@ -58,7 +57,7 @@ class INS:
 
         return {input_pos: ret.check_balance()}
 
-    
+
 class DUP:
     def __init__(self, phi, fun):
         self.phi = phi
@@ -91,7 +90,7 @@ class DUP:
             for c in dup_set:
                 pre_pos = min(len(output), input_pos)
                 if Alphabet.is_char_model:  # if character-level model
-                    new_output = output + s[input_pos] + c 
+                    new_output = output + s[input_pos] + c
                 else:  # if word-level model
                     new_output = output + (s[input_pos], c,)
                 end_pos = min(len(new_output), input_pos + 1)
@@ -102,7 +101,7 @@ class DUP:
                         partial_loss[pos] * (
                                 Alphabet.embedding[Alphabet.mapping[new_output[pos]]] - Alphabet.embedding[
                             Alphabet.mapping[s[pos]]]))
-                    
+
                 ret.add(new_output, score)
 
         return {input_pos + 1: ret.check_balance()}
@@ -237,7 +236,7 @@ class REGEX:
                 else:  # if word-level model
                     if self.is_any or self.regex.fullmatch(Alphabet.escaped_char.join(s[:i])):
                         ret[i] = [[new_output, score]]
-        
+
         return ret
 
     def random_sample(self, s, output, input_pos, b, is_end=False):
@@ -349,7 +348,7 @@ class SUB:
     def beam_search_adversarial(self, s, output, input_pos, b, partial_loss):
         assert b > 0
         if input_pos < len(s) and s[input_pos] in self.alphabet_acc_set:
-            #input_pos_tag = pos_tag(s)[input_pos][1]
+            # input_pos_tag = pos_tag(s)[input_pos][1]
             ret = Beam(1)
             tmp_ret = self.fun(s[input_pos])
             add_tmp_ret = None
@@ -483,6 +482,11 @@ class Transformation:
             self.inner_budget = kwargs["inner_budget"]
         else:
             self.inner_budget = None
+        if "truncate" in kwargs and kwargs[
+            "truncate"] is not None:  # TODO now it only affects the beam_search_adversarial
+            self.truncate = kwargs["truncate"]
+        else:
+            self.truncate = inf
         for x in self.seq:
             assert isinstance(x, REGEX) or isinstance(x, DEL) or isinstance(x, INS) or isinstance(x, SWAP) \
                    or isinstance(x, SUB) or isinstance(x, tUnion) or isinstance(x, DUP)
@@ -579,6 +583,10 @@ class Transformation:
                     else:
                         tmp_res = t.beam_search_adversarial(s, output, pos, inner_budget, partial_loss)
                     for new_pos in tmp_res:
+                        if new_pos > self.truncate and (not isinstance(t, REGEX) or not t.is_any):
+                            # if the unit-transformation exceeds the truncated length and
+                            # it is not a REGEX or it is a not any REGEX
+                            continue
                         if new_pos not in new_ret:
                             new_ret[new_pos] = Beam(inner_budget)
                         for new_output, new_score in tmp_res[
@@ -589,7 +597,7 @@ class Transformation:
             for pos in new_ret:
                 new_ret[pos] = new_ret[pos].check_balance()
             ret = new_ret
-        
+
         true_ret = Beam(b)
         true_ret.add(s, 0)
         if len(s) in ret:
@@ -598,7 +606,8 @@ class Transformation:
                 end_pos = min(max(len(data), len(s)), Alphabet.max_len)
                 for i in range(pre_pos, end_pos):
                     score += np.sum(partial_loss[i] * (
-                        Alphabet.embedding[Alphabet.mapping[data[i] if i < len(data) else Alphabet.padding]] - Alphabet.embedding[Alphabet.mapping[s[i] if i < len(s) else Alphabet.padding]]))
+                            Alphabet.embedding[Alphabet.mapping[data[i] if i < len(data) else Alphabet.padding]] -
+                            Alphabet.embedding[Alphabet.mapping[s[i] if i < len(s) else Alphabet.padding]]))
                 true_ret.add(data, score)
 
         return true_ret.check_balance()
@@ -667,12 +676,17 @@ class Transformation:
         return get_max_delta(self)
 
 
-class TransformationDel(Transformation):    
+class TransformationDel(Transformation):
     def __init__(self, *arg, **kwargs):
         if "inner_budget" in kwargs:
             self.inner_budget = kwargs["inner_budget"]
         else:
             self.inner_budget = None
+
+        if "truncate" in kwargs and kwargs["truncate"] is not None:
+            self.truncate = kwargs["truncate"]
+        else:
+            self.truncate = inf
 
     def beam_search_adversarial(self, s, y_true, b):
         '''
@@ -691,35 +705,39 @@ class TransformationDel(Transformation):
             partial_loss = y_true.recv()
         else:
             partial_loss = Alphabet.partial_to_loss(Alphabet.to_ids(s), y_true)
-        
+
         sum_suffix = []
         for i in range(len(s) - 1):
             sum_suffix.append(np.sum(partial_loss[i] * (
-                Alphabet.embedding[Alphabet.mapping[s[i + 1]]] - Alphabet.embedding[Alphabet.mapping[s[i]]])))
+                    Alphabet.embedding[Alphabet.mapping[s[i + 1]]] - Alphabet.embedding[Alphabet.mapping[s[i]]])))
         sum_suffix.append(np.sum(partial_loss[len(s) - 1] * (
-            Alphabet.embedding[Alphabet.mapping[Alphabet.padding]] - Alphabet.embedding[Alphabet.mapping[s[len(s) - 1]]])))
+                Alphabet.embedding[Alphabet.mapping[Alphabet.padding]] - Alphabet.embedding[
+            Alphabet.mapping[s[len(s) - 1]]])))
         for i in range(len(sum_suffix) - 2, -1, -1):
             sum_suffix[i] += sum_suffix[i + 1]
-            
+
         true_ret = Beam(b)
         true_ret.add(s, 0)
-        delete_pos = [i for i in range(len(s))]
-        delete_pos.sort(key=lambda x:-sum_suffix[x])
+        delete_pos = [i for i in range(min(len(s), self.truncate))]
+        delete_pos.sort(key=lambda x: -sum_suffix[x])
         for i in range(min(b, len(delete_pos))):
             pos = delete_pos[i]
-            #if sum_suffix[pos] < 0:
-            #    break
             true_ret.add(s[:pos] + s[pos + 1:], sum_suffix[pos])
-            
+
         return true_ret.check_balance()
 
-    
-class TransformationIns(Transformation):    
+
+class TransformationIns(Transformation):
     def __init__(self, *arg, **kwargs):
         if "inner_budget" in kwargs:
             self.inner_budget = kwargs["inner_budget"]
         else:
             self.inner_budget = None
+
+        if "truncate" in kwargs and kwargs["truncate"] is not None:
+            self.truncate = kwargs["truncate"]
+        else:
+            self.truncate = inf
 
     def beam_search_adversarial(self, s, y_true, b):
         '''
@@ -738,14 +756,15 @@ class TransformationIns(Transformation):
             partial_loss = y_true.recv()
         else:
             partial_loss = Alphabet.partial_to_loss(Alphabet.to_ids(s), y_true)
-        
+
         sum_suffix = [0]
         for i in range(1, len(s)):
             sum_suffix.append(np.sum(partial_loss[i] * (
-                Alphabet.embedding[Alphabet.mapping[s[i - 1]]] - Alphabet.embedding[Alphabet.mapping[s[i]]])))
+                    Alphabet.embedding[Alphabet.mapping[s[i - 1]]] - Alphabet.embedding[Alphabet.mapping[s[i]]])))
         if len(s) < Alphabet.max_len:
             sum_suffix.append(np.sum(partial_loss[len(s)] * (
-                Alphabet.embedding[Alphabet.mapping[s[len(s) - 1]]] - Alphabet.embedding[Alphabet.mapping[Alphabet.padding]])))
+                    Alphabet.embedding[Alphabet.mapping[s[len(s) - 1]]] - Alphabet.embedding[
+                Alphabet.mapping[Alphabet.padding]])))
         sum_suffix.append(0)
         for i in range(len(sum_suffix) - 2, -1, -1):
             sum_suffix[i] += sum_suffix[i + 1]
@@ -756,32 +775,33 @@ class TransformationIns(Transformation):
                     t = list(Alphabet.adjacent_keys[s[i]])[0]
                     if i + 1 < len(s):
                         cost[i] = sum_suffix[i + 2] + np.sum(partial_loss[i + 1] * (
-                            Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[Alphabet.mapping[s[i + 1]]]))
+                                Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[
+                            Alphabet.mapping[s[i + 1]]]))
                     else:
                         cost[i] = sum_suffix[i + 2] + np.sum(partial_loss[i + 1] * (
-                            Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[Alphabet.mapping[Alphabet.padding]]))
+                                Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[
+                            Alphabet.mapping[Alphabet.padding]]))
         else:
             for i in range(len(s) - 1):
                 if s[i] in Alphabet.adjacent_keys:
                     t = list(Alphabet.adjacent_keys[s[i]])[0]
                     cost[i] = sum_suffix[i + 2] + np.sum(partial_loss[i + 1] * (
-                        Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[Alphabet.mapping[s[i + 1]]]))
-                
-            
+                            Alphabet.embedding[Alphabet.mapping[t]] - Alphabet.embedding[Alphabet.mapping[s[i + 1]]]))
+
         true_ret = Beam(b)
         true_ret.add(s, 0)
-        ins_pos = [i for i in range(len(s))]
-        ins_pos.sort(key=lambda x:-cost[x])
+        ins_pos = [i for i in range(min(len(s), self.truncate))]
+        ins_pos.sort(key=lambda x: -cost[x])
         for i in range(min(b, len(ins_pos))):
             pos = ins_pos[i]
-            #if cost[pos] < 0:
+            # if cost[pos] < 0:
             #    break
             t = list(Alphabet.adjacent_keys[s[pos]])[0]
             true_ret.add((s[:pos + 1] + t + s[pos + 1:])[:Alphabet.max_len], cost[pos])
-            
+
         return true_ret.check_balance()
 
-    
+
 class Union:
     def __init__(self, *args):
         self.p = args
@@ -966,4 +986,3 @@ def get_max_delta(self):
             self.max_delta = [0, self.get_delta()]
 
     return self.max_delta
-

@@ -5,6 +5,8 @@ import heapq
 import copy
 from multiprocessing import Pool, Process, SimpleQueue, Pipe
 
+inf = 1e10
+
 
 class Multiprocessing:
     @staticmethod
@@ -73,7 +75,7 @@ class MultiprocessingWithoutPipe:
             ans[num] = ret
 
         return ans
-    
+
 
 class Gradient(keras.layers.Layer):
     def __init__(self, y, **kwargs):
@@ -211,12 +213,13 @@ class Dict:
     def to_ids(self, s):
         return np.array([self.char2id[c] for c in s])
 
-    
+
 def swap_pytorch(x, p1, p2):
     z = x[p1].clone()
     x[p1] = x[p2]
     x[p2] = z
-    
+
+
 def compute_adjacent_keys(dict_map):
     lines = open("./dataset/en.key").readlines()
     adjacent_keys = [[] for i in range(len(dict_map))]
