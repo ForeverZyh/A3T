@@ -790,7 +790,7 @@ class TransformationIns(Transformation):
 
         true_ret = Beam(b)
         true_ret.add(s, 0)
-        ins_pos = [i for i in range(min(len(s), self.truncate))]
+        ins_pos = [i for i in range(min(len(s), self.truncate)) if s[i] in Alphabet.adjacent_keys]
         ins_pos.sort(key=lambda x: -cost[x])
         for i in range(min(b, len(ins_pos))):
             pos = ins_pos[i]
