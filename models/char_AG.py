@@ -23,10 +23,6 @@ S.Info.adjacent_keys = compute_adjacent_keys(dict_map)
 Alphabet.set_alphabet(dict_map, np.zeros((56, 64)))
 keep_same = REGEX(r".*")
 chars = Dict(dict_map)
-sub = Transformation(keep_same, SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]), keep_same)
-swap = Transformation(keep_same, SWAP(lambda c: True, lambda c: True), keep_same)
-ins = TransformationIns()
-delete = TransformationDel()
 
 class char_AG:
     def __init__(self, lr=0.0009, all_voc_size=56, D=64):
@@ -104,7 +100,7 @@ def train(filname, lr=0.0009):
     return normal_loss, normal_acc
 
 
-def adv_train(adv_model_file, target_transformation, adv_train_random=False, load_weights=None):
+def adv_train(adv_model_file, target_transformation, adv_train_random=False, truncate=None, load_weights=None):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -117,6 +113,11 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     model = char_AG()
         
     model.adversarial_training()
+    sub = Transformation(keep_same, SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]), keep_same, truncate=truncate)
+    swap = Transformation(keep_same, SWAP(lambda c: True, lambda c: True), keep_same, truncate=truncate)
+    ins = TransformationIns(truncate=truncate)
+    delete = TransformationDel(truncate=truncate)
+
     a = eval(target_transformation)
     if not adv_train_random:
         Alphabet.partial_to_loss = model.partial_to_loss
@@ -194,7 +195,7 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
    # model.adv_model.save_weights(filepath="./tmp/%s" % adv_model_file)
 
 
-def test_model(saved_model_file, func=None, target_transformation="None", test_only=False):
+def test_model(saved_model_file, func=None, target_transformation="None", test_only=False, truncate=True):
     training_X = np.load("./dataset/AG/X_train.npy")
     training_y = np.load("./dataset/AG/y_train.npy")
     test_X = np.load("./dataset/AG/X_test.npy")
@@ -212,6 +213,10 @@ def test_model(saved_model_file, func=None, target_transformation="None", test_o
     if test_only:
         return
     model.adversarial_training()
+    sub = Transformation(keep_same, SUB(lambda c: c in Alphabet.adjacent_keys, lambda c: Alphabet.adjacent_keys[c]), keep_same, truncate=truncate)
+    swap = Transformation(keep_same, SWAP(lambda c: True, lambda c: True), keep_same, truncate=truncate)
+    ins = TransformationIns(truncate=truncate)
+    delete = TransformationDel(truncate=truncate)
     a = eval(target_transformation)
     Alphabet.partial_to_loss = model.partial_to_loss
     
@@ -229,7 +234,7 @@ def test_model(saved_model_file, func=None, target_transformation="None", test_o
     batch_size = 64
     if func is not None:
         for i, (x, y) in enumerate(zip(test_X, test_Y)):
-            oracle_iterator = func(x, True, batch_size)
+            oracle_iterator = func(x, True, batch_size, truncate=truncate)
             all_correct = True
             for batch_X in oracle_iterator:
                 batch_Y = np.tile(np.expand_dims(y, 0), (len(batch_X), 1))
