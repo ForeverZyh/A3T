@@ -4,9 +4,11 @@
 
 This repository contains the code implementation of the paper *Robustness to Programmable String Transformations via Augmented Abstract Training*.
 
+**A3T** is an adversarial training technique that combines the strengths of augmentation and abstraction techniques. The key idea underlying A3T is to decompose the perturbation space into two subsets, one that can be explored using augmentation and one that can be abstracted.
+
 The structure of this repositoty:
 
-- `DSL`: contains our domain specifc lanauge for specifying the perturbation space. We also include a generalized version of HotFlip in this folder. 
+- `DSL`: contains our domain specific lanauge for specifying the perturbation space. We also include a generalized version of HotFlip in this folder. 
 
 - `dataset`: contains the dataset and data preprossing files. The csv files on AG dataset can be found at [this repo](https://github.com/mhjabreel/CharCnn_Keras/tree/master/data/ag_news_csv). The training and validation set of SST2 dataset are downloaded automatically. The test set can be found at [this repo](https://github.com/mhjabreel/CharCnn_Keras/tree/master/data/ag_news_csv). The Glove word embedding can be found at [this website](http://nlp.stanford.edu/data/glove.6B.zip). The synonyms we used can be found at [this website](http://paraphrase.org/#/download), and we used English-Lexical-S Size.
 - `diffai`: is a submodule containing the implementation of A3T built on top of diffai.
@@ -90,4 +92,8 @@ python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" 
 test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 --test-size=1821 --adv-test=True --transform='Composition(delete, delete, sub, sub)'
 test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 --test-size=1821 --test-func='DelDupSubWord(2,0,2,d)
 ```
+
+## Published Work
+
+Yuhao Zhang, Aws Albarghouthi, Loris D’Antoni, Robustness to Programmable String Transformations via Augmented Abstract Training.
 
