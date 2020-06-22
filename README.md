@@ -9,10 +9,11 @@ This repository contains the code implementation of the paper *Robustness to Pro
 The structure of this repositoty:
 
 - `DSL`: contains our domain specific lanauge for specifying the perturbation space. We also include a generalized version of HotFlip in this folder. 
-
 - `dataset`: contains the dataset and data preprossing files. The csv files on AG dataset can be found at [this repo](https://github.com/mhjabreel/CharCnn_Keras/tree/master/data/ag_news_csv). The training and validation set of SST2 dataset are downloaded automatically. The test set can be found at [this repo](https://github.com/mhjabreel/CharCnn_Keras/tree/master/data/ag_news_csv). The Glove word embedding can be found at [this website](http://nlp.stanford.edu/data/glove.6B.zip). The synonyms we used can be found at [this website](http://paraphrase.org/#/download), and we used English-Lexical-S Size.
 - `diffai`: is a submodule containing the implementation of A3T built on top of diffai.
 - `models`: contains the baselines of normal training, random augmentation, and HotFlip augmentation. 
+
+We also uploaded our checkpoints [here](https://drive.google.com/file/d/1QCOAGNH7Fq3jWerTD5ArocOAILbG3OA3/view?usp=sharing).
 
 
 
@@ -43,20 +44,20 @@ pip uninstall Pillow && pip install Pillow==6.1.0
 
 We provided the experiment setups of baselines in `exp_scripts_AG.py` and `exp_scripts_SST2.py`. And we show some examples of training and evluating the models.
 
-- The following code segment does normal training on AG dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{SwapPair}, 1), (T_{SubAdj}, 1)\}$.
+- The following code segment does normal training on AG dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{SwapPair}, 2), (T_{SubAdj}, 2)\}$.
 
 ```python
 AG_train("char_AG") # train() is the normal training method
-AG_test_model("char_AG", target_transformation="Composition(swap, sub)") # pass the target_transformation argument as the target perturbation space
-AG_test_model("char_AG", func=partial(SwapSub(1,1)))  # using SwapSub to compute the exhaustive accuracy containing Swap
+AG_test_model("char_AG", target_transformation="Composition(swap, swap, sub, sub)", truncate=35) # pass the target_transformation argument as the target perturbation space as well as the truncate length
+AG_test_model("char_AG", func=partial(SwapSub(2,2)), truncate=35)  # using SwapSub to compute the exhaustive accuracy
 ```
 
-- The following code segment does random augmentation training on AG dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{Del}, 1), (T_{SubAdj}, 1)\}$.
+- The following code segment does random augmentation training on AG dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{Del}, 2), (T_{SubAdj}, 2)\}$.
 
 ```python
-AG_adv_train("char_AG_aug", target_transformation="Composition(delete, sub)", adv_train_random=True) # adv_train() is the augmentation training method, adv_train_random=True means random augmentation, False means HotFlip augmentation
-AG_test_model("char_AG_aug", target_transformation="Composition(delete, sub)")
-AG_test_model("char_AG_aug", func=partial(DelDupSubChar(1,0,1))) # using DelDupSubChar to compute exhaustive accuracy containing Ins, Del, or both
+AG_adv_train("char_AG_aug", target_transformation="Composition(delete, delete, sub, sub)", adv_train_random=True, truncate=30) # adv_train() is the augmentation training method, adv_train_random=True means random augmentation, False means HotFlip augmentation
+AG_test_model("char_AG_aug", target_transformation="Composition(delete, delete, sub, sub)", truncate=30)
+AG_test_model("char_AG_aug", func=partial(DelDupSubChar(2,0,2)), truncate=30) # using DelDupSubChar to compute exhaustive accuracy containing Ins, Del, or both
 ```
 
 - The following code segment does HotFlip augmentation training on SST2 dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{DelStop}, 2), (T_{Dup}, 2), (T_{SubSyn}, 2)\}$.
@@ -77,12 +78,12 @@ alias test-diffai="python ./diffai/. -d Point --epochs 1 --dont-write --test-fre
 
 And we show some examples of training and evluating the models.
 
-- The following commands do A3T(HotFlip) training on AG dataset and then evaluate on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{InsAdj}, 1), (T_{SubAdj}, 1)\}$.
+- The following commands do A3T(HotFlip) training on AG dataset and then evaluate on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{InsAdj}, 2), (T_{SubAdj}, 2)\}$.
 
 ```bash
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='ins' -r 0.005
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --adv-test=True --transform='Composition(ins, sub)'
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --test-func='DelDupSubChar(0,1,1,d)'
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(ins, ins)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=30
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --adv-test=True --transform='Composition(ins, ins, sub, sub)' --truncate=30
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --test-func='DelDupSubChar(0,2,2,d,truncate=30)' --truncate=30
 ```
 
 - The following code segment does A3T(search) training on SST2 dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{DelStop}, 2), (T_{SubSyn}, 2)\}$.

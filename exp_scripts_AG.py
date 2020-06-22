@@ -5,16 +5,18 @@ from diffai.exhaustive import SwapSub, DelDupSubWord, DelDupSubChar
 from functools import partial
 import os
 
-
 AG_train("char_AG")
 
 target_transformations = ["Composition(swap, sub)", "Composition(delete, sub)", "Composition(ins, sub)"]
-funcs = [partial(SwapSub, 1, 1), partial(DelDupSubChar, 1, 0, 1), partial(DelDupSubChar, 0, 1, 1)]
+funcs = [partial(SwapSub, 2, 2), partial(DelDupSubChar, 2, 0, 2), partial(DelDupSubChar, 0, 2, 2)]
 model_names = ["swapsub", "delsub", "inssub"]
 for (target_transformation, func, model_name) in zip(target_transformations, funcs, model_names):
-    AG_adv_train("char_AG_%s_aug" % model_name, target_transformation=target_transformation, adv_train_random=True)
-    AG_adv_train("char_AG_%s_adv" % model_name, target_transformation=target_transformation, adv_train_random=False)
+    AG_adv_train("char_AG_%s_aug" % model_name, target_transformation=target_transformation, adv_train_random=True,
+                 truncate=35 if model_name == "swapsub" else 30)
+    AG_adv_train("char_AG_%s_adv" % model_name, target_transformation=target_transformation, adv_train_random=False,
+                 truncate=35 if model_name == "swapsub" else 30)
     models = ["char_AG", "char_AG_%s_aug" % model_name, "char_AG_%s_adv" % model_name]
     for model in models:
-        AG_test_model(model, target_transformation=target_transformation)
-        AG_test_model(model, func=func)
+        AG_test_model(model, target_transformation=target_transformation,
+                      truncate=35 if model_name == "swapsub" else 30)
+        AG_test_model(model, func=func, truncate=35 if model_name == "swapsub" else 30)
