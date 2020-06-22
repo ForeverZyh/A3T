@@ -4,19 +4,19 @@
 
 # The following commands concern the A3T(HotFlip) training.
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(swap, swap)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=35
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(swap, swap)' --train-ratio=0.5 --epoch-ratio=0.8 --truncate=35
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(delete, delete)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=30
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(delete, delete)' --train-ratio=0.5 --epoch-ratio=0.8 --truncate=30
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(ins, ins)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=30
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(ins, ins)' --train-ratio=0.5 --epoch-ratio=0.8 --truncate=30
 
 # The following commands concern the A3T(search) training.
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --e-train=2 --test-func='SwapSub(2,0,d,truncate=35)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=35
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --e-train=2 --test-func='SwapSub(2,0,d,truncate=35)' --train-ratio=0.5 --epoch-ratio=0.8 --truncate=35
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubChar(2,0,0,d,truncate=30)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=30
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubChar(2,0,0,d,truncate=30)' --train-ratio=0.5 --epoch-ratio=0.8 --truncate=30
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubChar(0,2,0,d,truncate=30)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=30
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubChar(0,2,0,d,truncate=30)' --train-ratio=0.5 --epoch-ratio=0.8 --truncate=30
 
 # The following commands concern the evalaution.
 # Please replace TARGET_PYNET with our pynet file location.
@@ -37,19 +37,19 @@ test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --t
 
 # The following commands concern the A3T(HotFlip) training.
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(delete, delete)' -r 0.005 --epoch_ratio=0.4
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(delete, delete)' -r 0.005 --epoch-ratio=0.4
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(ins, ins)' -r 0.005 --epoch_ratio=0.4
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(ins, ins)' -r 0.005 --epoch-ratio=0.4
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(delete, delete, ins, ins)' -r 0.005 --epoch_ratio=0.4
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(delete, delete, ins, ins)' -r 0.005 --epoch-ratio=0.4
 
 # The following commands concern the A3T(search) training.
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(2,0,0,d)' -r 0.005 --epoch_ratio=0.4
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(2,0,0,d)' -r 0.005 --epoch-ratio=0.4
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(0,2,0,d)' -r 0.005 --epoch_ratio=0.4
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(0,2,0,d)' -r 0.005 --epoch-ratio=0.4
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(2,2,0,d)' -r 0.005 --epoch_ratio=0.4
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(2,2,0,d)' -r 0.005 --epoch-ratio=0.4
 
 # The following commands concern the evalaution.
 # Please replace TARGET_PYNET with our pynet file location.
@@ -70,28 +70,28 @@ test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 -
 
 # The following commands concern the A3T(HotFlip) training.
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='swap' --train-ratio=0.25 --epoch_ratio=0.8 --lr=0.0005
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D SST2char --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='swap' --train-ratio=0.25 --epoch-ratio=0.8 --lr=0.0005
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='delete' --train-ratio=0.1 --epoch_ratio=0.8 --lr=0.0005
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D SST2char --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='delete' --train-ratio=0.1 --epoch-ratio=0.8 --lr=0.0005
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='ins' --train-ratio=0.1 --epoch_ratio=0.8 --lr=0.0005
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D SST2char --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --adv-train=2 --transform='ins' --train-ratio=0.1 --epoch-ratio=0.8 --lr=0.0005
 
 # The following commands concern the A3T(search) training.
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --e-train=2 --test-func='SwapSub(1,0,d)' --train-ratio=0.5 --epoch_ratio=0.8 --lr=0.0005
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D SST2char --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --e-train=2 --test-func='SwapSub(1,0,d)' --train-ratio=0.5 --epoch-ratio=0.8 --lr=0.0005
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --e-train=2 --test-func='DelDupSubChar(1,0,0,d)' --train-ratio=0.5 --epoch_ratio=0.8 --lr=0.0005
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D SST2char --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --e-train=2 --test-func='DelDupSubChar(1,0,0,d)' --train-ratio=0.5 --epoch-ratio=0.8 --lr=0.0005
 
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --e-train=2 --test-func='DelDupSubChar(0,1,0,d)' --train-ratio=0.5 --epoch_ratio=0.8 --lr=0.0005
+python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelSST2Sub -D SST2char --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=1 --e-train=2 --test-func='DelDupSubChar(0,1,0,d)' --train-ratio=0.5 --epoch-ratio=0.8 --lr=0.0005
 
 # The following commands concern the evalaution.
 # Please replace TARGET_PYNET with our pynet file location.
 
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=1821 --adv-test=True --transform='Composition(swap, sub)'
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=1821 --test-func='SwapSub(1,1,d)'
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2char --width 0 --test-size=1821 --adv-test=True --transform='Composition(swap, sub)'
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2char --width 0 --test-size=1821 --test-func='SwapSub(1,1,d)'
 
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=1821 --adv-test=True --transform='Composition(delete, sub)'
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=1821 --test-func='DelDupSubChar(1,0,1,d)'
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2char --width 0 --test-size=1821 --adv-test=True --transform='Composition(delete, sub)'
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2char --width 0 --test-size=1821 --test-func='DelDupSubChar(1,0,1,d)'
 
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=1821 --adv-test=True --transform='Composition(ins, sub)'
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=1821 --test-func='DelDupSubChar(0,1,1,d)'
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2char --width 0 --test-size=1821 --adv-test=True --transform='Composition(ins, sub)'
+test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2char --width 0 --test-size=1821 --test-func='DelDupSubChar(0,1,1,d)'
