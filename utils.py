@@ -89,6 +89,11 @@ class Gradient(keras.layers.Layer):
     def call(self, x, **kwargs):
         return K.gradients(self.y, x)[0]
 
+    def compute_mask(self, inputs, mask=None):
+        if mask is None:
+            return None
+        return mask
+
     def compute_output_shape(self, input_shape):
         return input_shape
 
