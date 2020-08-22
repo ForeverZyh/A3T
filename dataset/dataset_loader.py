@@ -1,8 +1,8 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import nltk
-from os import listdir
-from os.path import isfile, join
+from os import listdir, mkdir
+from os.path import isfile, join, exists
 from nltk.tokenize import word_tokenize
 import numpy as np
 
@@ -111,6 +111,9 @@ class SSTCharLevel:
                 y.append(int(label))
                 
             return np.array(X), np.array(y)
+        
+        if not exists("./dataset/SST2char"):
+            mkdir("./dataset/SST2char")
 
         try:
             SSTCharLevel.training_X = np.load("./dataset/SST2char/X_train.npy")
@@ -251,6 +254,9 @@ class SSTWordLevel:
                 
             return np.array(X), np.array(y)
 
+        if not exists("./dataset/SST2"):
+            mkdir("./dataset/SST2")
+        
         try:
             SSTWordLevel.training_X = np.load("./dataset/SST2/X_train.npy")
             SSTWordLevel.training_y = np.load("./dataset/SST2/y_train.npy")
