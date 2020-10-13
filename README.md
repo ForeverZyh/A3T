@@ -26,9 +26,9 @@ cd diffai
 pip install -r requirements.txt 
 cd ..
 pip install tensorflow-gpu==1.13.1
-pip install keras
+pip install keras==2.3.1
 pip install tensorflow-datasets==1.3.2
-pip install nltk
+pip install nltk==3.4.5
 ```
 
 Sometimes you may need to downgrade `numpy` to 1.16.1 or `Pillow` to 6.1.0 by
