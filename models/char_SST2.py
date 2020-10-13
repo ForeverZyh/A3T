@@ -21,7 +21,7 @@ Alphabet.set_char_model()
 Alphabet.max_len = SSTCharLevel.max_len
 Alphabet.padding = " "
 dict_map = SSTCharLevel.dict_map
-Alphabet.set_alphabet(dict_map, np.zeros((71, 150)))
+Alphabet.set_alphabet(dict_map, np.zeros((len(dict_map), 150)))
 S.Info.adjacent_keys = compute_adjacent_keys(dict_map)
 keep_same = REGEX(r".*")
 chars = Dict(dict_map)
