@@ -93,7 +93,7 @@ def train(filname, lr=0.0009):
     val_Y = to_categorical(val_y, nb_classes)
     training_Y = to_categorical(training_y, nb_classes)
     test_Y = to_categorical(test_y, nb_classes)
-    model = char_SST2(lr=lr)
+    model = char_SST2(lr=lr, all_voc_size=len(dict_map))
     model.model.fit(x=training_X, y=training_Y, batch_size=64, epochs=30, callbacks=[model.early_stopping], verbose=2,
                     validation_data=(val_X, val_Y), shuffle=True)
     model.model.save_weights(filepath="./tmp/%s" % filname)
@@ -115,7 +115,7 @@ def adv_train(adv_model_file, target_transformation, adv_train_random=False, loa
     test_Y = to_categorical(test_y, nb_classes)
     training_num = len(training_X)
     
-    model = char_SST2()
+    model = char_SST2(all_voc_size=len(dict_map))
         
     model.adversarial_training()
     a = eval(target_transformation)
@@ -207,7 +207,7 @@ def test_model(saved_model_file, func=None, target_transformation="None", test_o
     training_num = len(training_X)
     testing_num = len(test_X)
 
-    model = char_SST2()
+    model = char_SST2(all_voc_size=len(dict_map))
     model.model.load_weights("./tmp/%s" % saved_model_file)
     normal_loss, normal_acc = model.model.evaluate(test_X, test_Y, batch_size=64, verbose=0)
     print("normal loss: %.4f\t normal acc: %.4f" % (normal_loss, normal_acc))
