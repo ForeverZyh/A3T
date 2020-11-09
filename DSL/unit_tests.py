@@ -131,10 +131,13 @@ def char_test(a):
 
 def random_generator(length):
     s = ""
-    for i in range(length):
+    i = 0
+    while i < length:
         s += chr(np.random.randint(0, 26) + 97)
-        if np.random.rand() < 0.2:
+        i += 1
+        if i < length and np.random.rand() < 0.2:
             s += " "
+            i += 1
     return s
 
 
@@ -183,6 +186,7 @@ def interval_convex_char_test(a, dl_sub):
 
 def throughput_test1(dl_sub):
     t = time.time()
+    Alphabet.max_len = 300
     ans = Multiprocessing.mapping(dl_sub.beam_search_adversarial,
                                   [(random_generator(300), None, 3) for _ in range(16)], 8, Alphabet.partial_to_loss)
     print("throughput_test1 using " + str(time.time() - t) + "(s) time ...")
@@ -253,7 +257,7 @@ def beam_search_adversarial_test(a, t12, t3, t4):
     ans = Multiprocessing.mapping(a.beam_search_adversarial,
                                   [(s, y, budget) for _ in range(16)], 8, Alphabet.partial_to_loss)
     for aans in ans:
-        assert tuple(aans) == tuple(beams[0])
+        assert tuple(aans) == tuple(beams)
     outputs = a.exact_space(s)
     for output, score in beams:
         assert output in outputs
