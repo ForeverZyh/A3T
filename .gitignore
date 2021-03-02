@@ -6,3 +6,4 @@ main.py
 *.iml
 tmp/
 *.csv
+*pynet
