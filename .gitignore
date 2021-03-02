@@ -2,8 +2,8 @@ main.py
 *.pyc
 *.xml
 *.npy
-*.txt
 *.iml
 tmp/
+out/
 *.csv
 *pynet
