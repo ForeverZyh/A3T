@@ -130,27 +130,35 @@ class Beam:
         self.in_queue = {}
 
     def add(self, data, score):
-        if data in self.in_queue:
+        '''
+        add (data, score) into queue
+        :param data: candidate
+        :param score: score of the candidate
+        :return: True if added in, False otherwise
+        '''
+        if data in self.in_queue:  # if data is ready in the priority queue, we update the score in self.in_queue
             if self.in_queue[data] < score:
                 self.in_queue[data] = score
                 return True
             return False
 
         ret = True
-        if len(self.queue) == self.budget:
+        if len(self.queue) == self.budget:  # if size(queue) == budget, we need to remove one
             while True:
                 a, b = heapq.heappop(self.queue)
-                if a == self.in_queue[b]:
-                    break
+                # the top of the priority queue may not be smallest, because it may contain new value in self.in_queue
+                if a == self.in_queue[b]:  # if the value is not updated, then it is smallest
+                    break  # remove (a, b)
                 else:
-                    heapq.heappush(self.queue, (self.in_queue[b], b))
-            del self.in_queue[b]
-            if a > score:
+                    heapq.heappush(self.queue,
+                                   (self.in_queue[b], b))  # otherwise, update in the priority queue (lazily)
+            del self.in_queue[b]  # remove (a, b) from self.in_queue
+            if a > score:  # if the old (a, b) is better then new (score, data), we replace (score, data) with (a, b)
                 score, data = a, b
                 ret = False
 
-        heapq.heappush(self.queue, (score, data))
-        self.in_queue[data] = score
+        heapq.heappush(self.queue, (score, data))  # add (score, data)
+        self.in_queue[data] = score  # update in self.in_queue
         return ret
 
     def extend(self, others):
@@ -165,7 +173,7 @@ class Beam:
     def check_balance(self):
         ret = []
         for data in self.in_queue:
-            ret.append([data, self.in_queue[data]])
+            ret.append((data, self.in_queue[data]))
         ret.sort(key=lambda x: -x[1])
         return ret
 

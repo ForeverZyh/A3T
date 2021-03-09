@@ -1,49 +1,30 @@
-import future
-import builtins
-import past
-import six
-import copy
 from functools import partial
 import time as sys_time
 
 from timeit import default_timer as timer
-from datetime import datetime
 import argparse
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torchvision import datasets
-from torch.utils.data import Dataset
 import decimal
 import torch.onnx
-import numpy as np
 
-import inspect
 from inspect import getargspec
 import os
-import sys
-sys.path.append("./")
-import helpers as h
-from helpers import Timer
+
+from a3t.diffai.helpers import Timer
 import copy
-import random
 
-from components import *
-import models
+from a3t.diffai.components import *
+import a3t.diffai.models as models
 
-import goals
-import scheduling
+import a3t.diffai.goals as goals
+import a3t.diffai.scheduling as scheduling
 
-from goals import *
-from scheduling import *
+from a3t.diffai.goals import *
+from a3t.diffai.scheduling import *
 
-from exhaustive import *
+from a3t.diffai.exhaustive import *
 
-from utils import Dict, Multiprocessing, MultiprocessingWithoutPipe, compute_adjacent_keys
-from DSL.transformations import REGEX, Transformation, INS, tUnion, SUB, DEL, Composition, Union, SWAP, DUP, TransformationIns, TransformationDel
-from DSL.Alphabet import Alphabet
-from dataset.dataset_loader import SSTWordLevel, Glove, SSTCharLevel
+from utils import Multiprocessing, MultiprocessingWithoutPipe, compute_adjacent_keys
+from a3t.dataset.dataset_loader import SST2WordLevel, Glove, SST2CharLevel
 
 import math
 
@@ -152,103 +133,6 @@ class Top(nn.Module):
         self.net.printNet(f)
 
 
-class DataParallelAI(nn.DataParallel):
-    def __init__(self, module, device_ids=None, output_device=None, dim=0):
-        super(DataParallelAI, self).__init__(module, device_ids, output_device, dim)
-        
-    def scatter(self, inputs, kwargs, device_ids):
-#         print(len(device_ids))
-        def inner_scatter(inputs, target_gpus, dim=0):
-            if isinstance(inputs, tuple) and len(inputs) == 1:
-                inputs = inputs[0]
-            if isinstance(inputs, ai.ListDomain):
-                rets = [type(inputs)([]) for _ in range(len(device_ids))]
-                for (i, a) in enumerate(inputs.al):
-                    tmp_rets = inner_scatter(a, target_gpus, dim)
-                    assert len(tmp_rets) == len(rets)
-                    for ret, tmp_ret in zip(rets, tmp_rets):
-                        ret.al.append(tmp_ret)
-#                 print(rets)
-                return rets
-            elif isinstance(inputs, ai.TaggedDomain):
-                tmp_rets = inner_scatter(inputs.a, target_gpus, dim)
-                rets = []
-                for tmp_ret in tmp_rets:
-                    rets.append(type(inputs)(tmp_ret, inputs.tag))
-                return rets
-            elif isinstance(inputs, ai.LabeledDomain):
-                tmp_rets = inner_scatter(inputs.o, target_gpus, dim)
-                rets = []
-                for tmp_ret in tmp_rets:
-                    rets.append(type(inputs)(inputs.label))
-                    rets[-1].box(tmp_ret)
-                return rets
-            elif isinstance(inputs, ai.HybridZonotope):
-                head = inner_scatter(inputs.head, target_gpus, dim)
-                errors = None if inputs.errors is None else inner_scatter(inputs.errors, target_gpus, 1)
-                beta = None if inputs.beta is None else inner_scatter(inputs.beta, target_gpus, dim)
-                rets = []
-                for i in range(len(head)):
-                    rets.append(type(inputs)(head[i], beta[i] if beta is not None else None, errors[i] if errors is not None else None))
-                return rets
-            else:
-                return nn.parallel.scatter_gather.scatter(inputs, target_gpus, dim)
-        
-        def scatter_kwargs(inputs, kwargs, target_gpus, dim=0):
-            r"""Scatter with support for kwargs dictionary"""
-            inputs = inner_scatter(inputs, target_gpus, dim) if inputs else []
-            kwargs = inner_scatter(kwargs, target_gpus, dim) if kwargs else []
-            if len(inputs) < len(kwargs):
-                inputs.extend([() for _ in range(len(kwargs) - len(inputs))])
-            elif len(kwargs) < len(inputs):
-                kwargs.extend([{} for _ in range(len(inputs) - len(kwargs))])
-            inputs = tuple(inputs)
-            kwargs = tuple(kwargs)
-            return inputs, kwargs
-        
-        return scatter_kwargs(inputs, kwargs, device_ids, dim=self.dim)
-    
-#     def forward(self, *inputs, **kwargs):
-#         if not self.device_ids:
-#             return self.module(*inputs, **kwargs)
-#         inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
-#         if len(self.device_ids) == 1:
-#             return self.module(*inputs[0], **kwargs[0])
-#         replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
-#         outputs = self.parallel_apply(replicas, inputs, kwargs)
-#         return self.gather(outputs, self.output_device)
-    
-    def gather(self, outputs, target_device, dim=0):
-        def inner_gather(outputs, target_gpus, dim=0):
-            if isinstance(outputs[0], ai.ListDomain):
-                ret = type(outputs[0])([])
-                for i in range(len(outputs[0].al)):
-                    t = [o.al[i] for o in outputs]
-                    tmp_rets = inner_gather(t, target_gpus, dim)
-                    ret.al.append(tmp_rets)
-
-                return ret
-            elif isinstance(outputs[0], ai.TaggedDomain):
-                t = [o.a for o in outputs]
-                tmp_rets = inner_gather(t, target_gpus, dim)
-                return type(outputs[0])(tmp_rets, outputs[0].tag)
-            elif isinstance(outputs[0], ai.LabeledDomain):
-                t = [ot.o for ot in outputs]
-                tmp_rets = inner_gather(t, target_gpus, dim)
-                ret = type(outputs[0])(outputs[0].label)
-                ret.box(tmp_rets)
-                return ret
-            elif isinstance(outputs[0], ai.HybridZonotope):
-                head = inner_gather([o.head for o in outputs], target_gpus, dim)
-                errors = None if outputs[0].errors is None else inner_gather([o.errors for o in outputs], target_gpus, 1)
-                beta = None if outputs[0].beta is None else inner_gather([o.beta for o in outputs], target_gpus, dim)
-                return type(outputs[0])(head, beta, errors)
-            else:
-                return nn.parallel.scatter_gather.gather(outputs, target_gpus, dim)
-            
-        return inner_gather(outputs, target_device, dim)
-
-
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch DiffAI Example',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -350,9 +234,9 @@ if args.gpu_id is not None:
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 if args.dataset == "SST2":
-    SSTWordLevel.build()
+    SST2WordLevel.build()
 elif args.dataset == "SST2char":
-    SSTCharLevel.build()
+    SST2CharLevel.build()
 
 largest_domain = max([len(h.catStrs(d)) for d in (args.domain)])
 largest_test_domain = max([len(h.catStrs(d)) for d in (args.test_domain)])
@@ -381,7 +265,7 @@ elif args.dataset in ["SST2", "SST2char"]:
     num_classes = 2
 else:
     num_classes = int(max(getattr(train_loader.dataset, 'train_labels' if args.dataset != "SVHN" else 'labels'))) + 1
-    
+
 print("input_dims: ", input_dims)
 print("Num classes: ", num_classes)
 
@@ -411,12 +295,12 @@ if args.dataset == "AG":
     if args.adv_train > 0 or args.adv_test:
         transform = eval(args.transform)
     pre_set_ratio = args.epoch_ratio
-    
+
 elif args.dataset == "SST2char":
     Alphabet.set_char_model()
-    Alphabet.max_len = SSTCharLevel.max_len
+    Alphabet.max_len = SST2CharLevel.max_len
     Alphabet.padding = " "
-    dict_map = SSTCharLevel.dict_map # len(dict_map) = 71
+    dict_map = SST2CharLevel.dict_map  # len(dict_map) = 71
     Alphabet.set_alphabet(dict_map, np.zeros((71, 150)))
     keep_same = REGEX(r".*")
     swap = Transformation(keep_same, SWAP(lambda c: True, lambda c: True), keep_same, truncate=args.truncate)
@@ -432,17 +316,18 @@ elif args.dataset == "SST2char":
 
 elif args.dataset == "SST2":
     Alphabet.set_word_model()
-    Alphabet.max_len = SSTWordLevel.max_len
+    Alphabet.max_len = SST2WordLevel.max_len
     Alphabet.padding = "_UNK_"
     dict_map = Glove.str2id
     Alphabet.set_alphabet(dict_map, Glove.embedding)
     keep_same = REGEX(r".*")
     sub = Transformation(keep_same,
-                         SUB(lambda c: c in SSTWordLevel.synonym_dict, lambda c: SSTWordLevel.synonym_dict[c], lambda c: SSTWordLevel.synonym_dict_pos_tag[Glove.str2id[c]]),
+                         SUB(lambda c: c in SST2WordLevel.synonym_dict, lambda c: SST2WordLevel.synonym_dict[c],
+                             lambda c: SST2WordLevel.synonym_dict_pos_tag[Glove.str2id[c]]),
                          keep_same)
     delete = Transformation(keep_same,
-                         DEL(lambda c: c in ["a", "the", "and", "to", "of"]),
-                         keep_same)
+                            DEL(lambda c: c in ["a", "the", "and", "to", "of"]),
+                            keep_same)
     ins = Transformation(keep_same,
                          DUP(lambda c: True, lambda c: [c]),
                          keep_same)
@@ -452,25 +337,25 @@ elif args.dataset == "SST2":
 
 if args.dataset in ["AG", "SST2char"]:
     adjacent_keys = compute_adjacent_keys(dict_map)
-    EmbeddingWithSub.adjacent_keys = adjacent_keys
+    Embedding.adjacent_keys = adjacent_keys
     S.Info.adjacent_keys = adjacent_keys
-        
+
 if args.decay_fir:
     decay_delta = args.train_delta / (args.epochs * pre_set_ratio * len(train_loader) * args.batch_size / decay_step)
     decay_ratio = args.train_ratio / (args.epochs * pre_set_ratio * len(train_loader) * args.batch_size / decay_step)
     if not args.decay_delta:
-        EmbeddingWithSub.delta = args.train_delta
+        Embedding.delta = args.train_delta
     else:
-        EmbeddingWithSub.delta = decay_delta * (args.resume_epoch * len(train_loader) * args.batch_size / decay_step)
+        Embedding.delta = decay_delta * (args.resume_epoch * len(train_loader) * args.batch_size / decay_step)
     resume_ratio = decay_ratio * (args.resume_epoch * len(train_loader) * args.batch_size / decay_step)
 else:
     decay_delta = 0
     decay_ratio = 0
-    EmbeddingWithSub.delta = args.train_delta
+    Embedding.delta = args.train_delta
 current_ratio = 0
-EmbeddingWithSub.truncate = args.truncate
+Embedding.truncate = args.truncate
 
-    
+
 # generate adv attack examples
 def adv_batch(batch_X, batch_Y):
     Info.adv = True
@@ -478,8 +363,8 @@ def adv_batch(batch_X, batch_Y):
     arg_list = []
     for x, y in zip(batch_X, batch_Y):
         arg_list.append((Alphabet.to_string(x, remove_padding=True), y, args.adv_train))
-#                 rets = Multiprocessing.mapping(transform.beam_search_adversarial, arg_list, 16, Alphabet.partial_to_loss)
-#                 for i, ret in enumerate(rets):
+    #                 rets = Multiprocessing.mapping(transform.beam_search_adversarial, arg_list, 16, Alphabet.partial_to_loss)
+    #                 for i, ret in enumerate(rets):
     for i, arg in enumerate(arg_list):
         ret = transform.beam_search_adversarial(*arg)
         adv_batch_X.append(batch_X[i].unsqueeze(0))
@@ -487,7 +372,7 @@ def adv_batch(batch_X, batch_Y):
             adv_batch_X.append(torch.Tensor(Alphabet.to_ids(ret[j][0])).cuda().unsqueeze(0).long())
         for j in range(args.adv_train - len(ret)):
             adv_batch_X.append(batch_X[i].unsqueeze(0))
-            
+
     Info.adv = False
     return torch.cat(adv_batch_X, 0)
 
@@ -506,7 +391,7 @@ def train(epoch, models, decay=True):
     global total_batches_seen
     global transform
     global current_ratio
-    
+
     gpu_num = torch.cuda.device_count()
     print('GPU NUM: {:2d}'.format(gpu_num))
     show = 1
@@ -520,7 +405,7 @@ def train(epoch, models, decay=True):
 
     for batch_idx, (data, target) in enumerate(train_loader):
         if args.decay_fir and total_batches_seen == 0 and resume_ratio > 0:
-            print(("delta: {}").format(EmbeddingWithSub.delta))
+            print(("delta: {}").format(Embedding.delta))
             for model in models:
                 if isinstance(model.ty, goals.DList) and len(model.ty.al) == 2 and decay:
                     for (i, a) in enumerate(model.ty.al):
@@ -531,10 +416,10 @@ def train(epoch, models, decay=True):
                             model.ty.al[i] = (a[0], t)
                         else:
                             model.ty.al[i] = (a[0], Const(max(a[1].getVal() - resume_ratio, 1 - args.train_ratio)))
-                            
+
         elif args.decay_fir and (total_batches_seen + 1) * args.batch_size % decay_step == 0:
-            EmbeddingWithSub.delta = min(EmbeddingWithSub.delta + decay_delta, args.train_delta)
-            if show % 100 == 0: print(("delta: {}").format(EmbeddingWithSub.delta))
+            Embedding.delta = min(Embedding.delta + decay_delta, args.train_delta)
+            if show % 100 == 0: print(("delta: {}").format(Embedding.delta))
             for model in models:
                 if isinstance(model.ty, goals.DList) and len(model.ty.al) == 2 and decay:
                     for (i, a) in enumerate(model.ty.al):
@@ -586,13 +471,14 @@ def train(epoch, models, decay=True):
                     loss = model.aiLoss(data, target, **vargs, parallel=parallel_model)
                 ids = []
                 for i in range(len(loss)):
-                    if i % (args.adv_train + 1) == 0 or loss[i] > loss[i // (args.adv_train + 1) * (args.adv_train + 1)]: # if find worse adv examples
-                        ids.append(i)                            
+                    if i % (args.adv_train + 1) == 0 or loss[i] > loss[
+                        i // (args.adv_train + 1) * (args.adv_train + 1)]:  # if find worse adv examples
+                        ids.append(i)
                 ids = torch.Tensor(ids).cuda().long()
                 data = torch.index_select(data, 0, ids)
                 if show % 1000 == 0: print(len(data))
-                target = torch.index_select(target, 0 ,ids)
-                #print(target)
+                target = torch.index_select(target, 0, ids)
+                # print(target)
             elif args.e_train > 0:
                 model.eval()
                 with torch.no_grad():
@@ -609,16 +495,16 @@ def train(epoch, models, decay=True):
                                 for j in range(len(worst)):
                                     if worst[j][1] < bubble[1]:
                                         worst[j], bubble = bubble, worst[j]
-                                        
+
                         e_batch.append(d.unsqueeze(0))
                         for w, _ in worst:
                             e_batch.append(w.unsqueeze(0))
                 model.train()
                 data = torch.cat(e_batch, 0)
                 target = target.unsqueeze(-1).repeat((1, args.e_train + 1)).view(-1)
-                
+
             adv_time = sys_time.time() - adv_time
-            
+
             timer = Timer("train a sample from " + model.name + " with " + model.ty.name, data.size()[0], False)
             with timer:
                 for s in model.getSpec(data.to_dtype(), target, time=time):
@@ -667,12 +553,13 @@ def train(epoch, models, decay=True):
                     largest_domain) + '}: {:3} [{:7}/{} ({:.0f}%)] \tAvg sec/ex {:1.8f}\tLoss: {:.6f}').format(
                     model.name, model.ty.name,
                     epoch,
-                    batch_idx * len(data) // (args.adv_train + 1), len(train_loader.dataset), 100. * batch_idx / len(train_loader),
+                    batch_idx * len(data) // (args.adv_train + 1), len(train_loader.dataset),
+                    100. * batch_idx / len(train_loader),
                     model.speed,
                     lossy))
-    
-    tmp_delta = EmbeddingWithSub.delta
-    EmbeddingWithSub.delta = args.train_delta
+
+    tmp_delta = Embedding.delta
+    Embedding.delta = args.train_delta
     val = 0
     val_origin = 0
     batch_cnt = 0
@@ -689,16 +576,17 @@ def train(epoch, models, decay=True):
                 else:
                     model = models[model_id].eval()
                     parallel_model = model.eval()
-                
+
                 for s in model.getSpec(data.to_dtype(), target):
                     loss = model.aiLoss(*s, **vargs, parallel=parallel_model).mean(dim=0)
                     val += loss
 
                 loss = model.aiLoss(data, target, **vargs, parallel=parallel_model).mean(dim=0)
                 val_origin += loss
-                
-    EmbeddingWithSub.delta = tmp_delta
-    val = (val - val_origin * (1 - current_ratio)) / current_ratio * args.train_ratio + val_origin * (1 - args.train_ratio)
+
+    Embedding.delta = tmp_delta
+    val = (val - val_origin * (1 - current_ratio)) / current_ratio * args.train_ratio + val_origin * (
+            1 - args.train_ratio)
 
     return val_origin / batch_cnt, val / batch_cnt
 
@@ -707,12 +595,13 @@ num_tests = 0
 
 
 def test(models, epoch, f=None):
-    tmp_delta = EmbeddingWithSub.delta
-    EmbeddingWithSub.delta = args.train_delta
+    tmp_delta = Embedding.delta
+    Embedding.delta = args.train_delta
     global num_tests
     global transform
     num_tests += 1
-#     # generate adv attack examples
+
+    #     # generate adv attack examples
     def adv_batch(batch_X, batch_Y):
         Info.adv = True
         adv_batch_X = []
@@ -789,20 +678,22 @@ def test(models, epoch, f=None):
                         for batch_d in iterator_oracle:
                             batch_size = len(batch_d)
                             batch_t = t.repeat(batch_size)
-                            box = m.domains[0].domain.box(batch_d, w=m.model.w, model=m.model, untargeted=True, target=batch_t).to_dtype() # only test the first domain
+                            box = m.domains[0].domain.box(batch_d, w=m.model.w, model=m.model, untargeted=True,
+                                                          target=batch_t).to_dtype()  # only test the first domain
                             bs = m.model(box)
                             batch_correct = bs.isSafe(batch_t).sum().item()
                             if batch_correct != batch_size:
                                 all_correct = False
                                 break
-                                
+
                         if all_correct: correct += 1
-                    
+
                     m.correct += correct
                 else:
-                    pred = m.model(data).vanillaTensorPart().max(1, keepdim=True)[1]  # get the index of the max log-probability
+                    pred = m.model(data).vanillaTensorPart().max(1, keepdim=True)[
+                        1]  # get the index of the max log-probability
                     m.correct += pred.eq(target.data.view_as(pred)).sum()
-                    
+
                 if num_its % 100 == 0:
                     print(num_its, int(m.correct) * 100.0 / num_its)
 
@@ -899,8 +790,8 @@ def test(models, epoch, f=None):
                     print(decimal.Decimal(float(t)).__format__("f"), file=imgfile)
             with open(img_file + ".class", "w") as imgfile:
                 print(int(target.item()), file=imgfile)
-    
-    EmbeddingWithSub.delta = tmp_delta
+
+    Embedding.delta = tmp_delta
 
 
 def createModel(net, domain, domain_name):
@@ -979,7 +870,7 @@ def buildNet(n):
 
 if not args.test is None:
     if args.resume_epoch == 0:
-        EmbeddingWithSub.delta = args.train_delta
+        Embedding.delta = args.train_delta
 
     test_name = None
 
@@ -1071,5 +962,4 @@ with h.mopen(args.dont_write, os.path.join(out_dir, "log.txt"), "w") as f:
                 if f is not None:
                     f.flush()
 
-                    
     h.printBoth("Best at epoch %d\n" % last_best, f=f)

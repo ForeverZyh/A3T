@@ -3,10 +3,9 @@ import itertools
 import torch
 
 from utils import swap_pytorch
-from dataset.dataset_loader import SSTWordLevel, Glove
+from a3t.dataset.dataset_loader import SST2WordLevel, Glove
 from nltk import pos_tag
-from DSL.Alphabet import Alphabet
-import diffai.scheduling as S
+import a3t.diffai.scheduling as S
 
 
 def SwapSub(a, b, x, is_numpy=False, batch_size=64, truncate=None):
@@ -141,7 +140,7 @@ def DelDupSubChar(a, b, c, x, is_numpy=False, batch_size=64, padding_id=0, trunc
             
 
 def DelDupSubWord(a, b, c, x, is_numpy=False, batch_size=64, del_set={"a", "and", "the", "of", "to"}, padding_id=0):
-    SSTWordLevel.build()
+    SST2WordLevel.build()
     if not is_numpy:
         x = x.cpu()
         X = []
@@ -152,16 +151,16 @@ def DelDupSubWord(a, b, c, x, is_numpy=False, batch_size=64, del_set={"a", "and"
     while end_pos > 0 and int(x[end_pos - 1]) == padding_id:
         end_pos -= 1
         
-    valid_sub_poss = [i for i in range(end_pos) if int(x[i]) in SSTWordLevel.synonym_dict_id]
+    valid_sub_poss = [i for i in range(end_pos) if int(x[i]) in SST2WordLevel.synonym_dict_id]
     input_pos_tag = pos_tag(Alphabet.to_string(x.long() if not is_numpy else x, True))
     for sub in range(c, -1, -1):
         for sub_poss in itertools.combinations(tuple(valid_sub_poss), sub):
             sub_pos_strs = []
             for sub_pos in sub_poss:
                 sub_pos_strs.append([])
-                for k in range(len(SSTWordLevel.synonym_dict_id[int(x[sub_pos])])):
-                    if SSTWordLevel.synonym_dict_pos_tag[int(x[sub_pos])][k] == input_pos_tag[sub_pos][1]:
-                        sub_pos_strs[-1].append(SSTWordLevel.synonym_dict_id[int(x[sub_pos])][k])
+                for k in range(len(SST2WordLevel.synonym_dict_id[int(x[sub_pos])])):
+                    if SST2WordLevel.synonym_dict_pos_tag[int(x[sub_pos])][k] == input_pos_tag[sub_pos][1]:
+                        sub_pos_strs[-1].append(SST2WordLevel.synonym_dict_id[int(x[sub_pos])][k])
             for sub_pos_str in itertools.product(*sub_pos_strs):
                 if is_numpy:
                     x3 = x.copy()

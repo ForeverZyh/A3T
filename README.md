@@ -6,32 +6,43 @@ This repository contains the code implementation of the paper *Robustness to Pro
 
 **A3T** is an adversarial training technique that combines the strengths of augmentation and abstraction techniques. The key idea underlying A3T is to decompose the perturbation space into two subsets, one that can be explored using augmentation and one that can be abstracted.
 
-The structure of this repositoty:
+The structure of this repository:
 
-- `DSL`: contains our domain specific lanauge for specifying the perturbation space. We also include a generalized version of HotFlip in this folder. 
-- `dataset`: contains the dataset and data preprossing files. The csv files on AG dataset can be found at [this repo](https://github.com/mhjabreel/CharCnn_Keras/tree/master/data/ag_news_csv). The training and validation set of SST2 dataset are downloaded automatically. The test set can be found at [this repo](https://github.com/mhjabreel/CharCnn_Keras/tree/master/data/ag_news_csv). The Glove word embedding can be found at [this website](http://nlp.stanford.edu/data/glove.6B.zip). The synonyms we used can be found at [this website](http://paraphrase.org/#/download), and we used English-Lexical-S Size.
+- `DSL`: contains our domain specific language for specifying the perturbation space. We also include a generalized version of HotFlip in this folder. 
+- `dataset`: prepares the SST2 dataset. 
+The synonyms we used can be found at [this website](http://paraphrase.org/#/download), and we used English-Lexical-S Size.
+The adjacent keyboard mapping can be found at [here](a3t/dataset/en.key).
 - `diffai`: is a submodule containing the implementation of A3T built on top of diffai.
-- `models`: contains the baselines of normal training, random augmentation, and HotFlip augmentation. 
 
+### Reproducing Results in the Paper
+
+To reproduce results in the paper, please see the [artifacts tag](https://github.com/ForeverZyh/A3T/tags). 
+The main branch of this repository is a library that supports general and easy usage of A3T with experiment scripts removed and code refactored. 
 We also uploaded our checkpoints [here](https://drive.google.com/file/d/1QCOAGNH7Fq3jWerTD5ArocOAILbG3OA3/view?usp=sharing).
 
 
-
 ## Environments 
+We encourage users to use virtual environments such as pyenv or conda.
 
-We encourage users to use virtual environments such as virtualenv or conda.
+### From `pip`
+
+Get A3T using `pip`:
 
 ```bash
-cd diffai 
-pip install -r requirements.txt 
-cd ..
-pip install tensorflow-gpu==1.13.1
-pip install keras==2.3.1
-pip install tensorflow-datasets==1.3.2
-pip install nltk==3.4.5
+pip install a3t
 ```
 
-Sometimes you may need to downgrade `numpy` to 1.16.1 or `Pillow` to 6.1.0 by
+### From source
+
+
+```bash
+git clone https://github.com/ForeverZyh/A3T.git
+cd A3T
+python setup.py install
+```
+
+### Troubleshooting
+Sometimes you may need to downgrade `numpy` to 1.16.1 and/or `Pillow` to 6.1.0 by
 
 ```bash
 pip uninstall numpy && pip install numpy==1.16.1
@@ -39,62 +50,73 @@ pip uninstall Pillow && pip install Pillow==6.1.0
 ```
 
 
+## Get Started
 
-## Experiment Scripts
+We provide the training process of a word-level model and a char-level model on the SST2 dataset. 
+Please see the `tests/test_run.py` for details.
 
-We provided the experiment setups of baselines in `exp_scripts_AG.py` and `exp_scripts_SST2.py`. And we show some examples of training and evluating the models.
+### Prepare the Dataset and the Model
 
-- The following code segment does normal training on AG dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{SwapPair}, 2), (T_{SubAdj}, 2)\}$.
+The default save directory is `/tmp/.A3T`, but one can also specify their own path (see `Glove.build()` in `a3t/dataset/dataset_loader.py`).
+
+Use the following code to load the word-level model and sst2 word dataset:
+```python
+from a3t.dataset.dataset_loader import SST2WordLevel, Glove
+
+# Load the Glove embedding 6B.50d
+Glove.build(6, 50)
+SST2WordLevel.build()
+```
+
+Use the following code the load the char-level model and sst2 char dataset:
+```python
+from a3t.dataset.dataset_loader import SST2CharLevel
+
+SST2CharLevel.build()
+```
+
+The `loadDataset` in `a3t.diffai.helpers` can help to load the dataset. 
+The method accepts four arguments (one optional)
 
 ```python
-AG_train("char_AG") # train() is the normal training method
-AG_test_model("char_AG", target_transformation="Composition(swap, swap, sub, sub)", truncate=35) # pass the target_transformation argument as the target perturbation space as well as the truncate length
-AG_test_model("char_AG", func=partial(SwapSub(2,2)), truncate=35)  # using SwapSub to compute the exhaustive accuracy
+def loadDataset(dataset, batch_size, type, test_slice=None):
+    """
+    load the dataset
+    :param dataset: the name of the dataset, currently support SST2CharLevel and SST2WordLevel
+    :param batch_size: the batch size of the dataset loader
+    :param type: "train", "val", "test"
+    :param test_slice: select a slice of the data
+    :return: a dataset loader
+    """
 ```
 
-- The following code segment does random augmentation training on AG dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{Del}, 2), (T_{SubAdj}, 2)\}$.
+### Customize the String Transformations
+
+In general, A3T supports customized string transformations provided by the users.
+The `DSL.transformation` contains several string transformations already defined and used in the experiments of the paper, namely,
+`Sub`, `SubChar`, `Del`, `Ins`, `InsChar`, and `Swap`. Among those transformations, `Sub`, `SubChar`, and `Swap` are labeled as length-preserving transformations, which allows robust training.
+
+One can define their own string transformations by implementing the abstract class `Transformation` and two functions `get_pos` and `transformer` as described in our paper. 
+`get_pos` accepts a list of input tokens and returns a list of position pairs (start, end).
+`transformer` accepts a list of input tokens and a start-end position pair and returns an iterator which enumerates the possible transformations at the start-end position.
+
+#### Define a perturbation space
+
+A perturbation space is in the form of `[(Trans_1, delta_1), ..., (Trans_n, delta_n)]`. Ideally, the perturbation is a set of the string transformations, but we use a list to store the perturbation space. 
+In other words, we impose an order in the perturbation space, which will effect the HotFlip attack (see TODO in `GeneralHotFlipAttack.gen_adv`). 
 
 ```python
-AG_adv_train("char_AG_aug", target_transformation="Composition(delete, delete, sub, sub)", adv_train_random=True, truncate=30) # adv_train() is the augmentation training method, adv_train_random=True means random augmentation, False means HotFlip augmentation
-AG_test_model("char_AG_aug", target_transformation="Composition(delete, delete, sub, sub)", truncate=30)
-AG_test_model("char_AG_aug", func=partial(DelDupSubChar(2,0,2)), truncate=30) # using DelDupSubChar to compute exhaustive accuracy containing Ins, Del, or both
+from a3t.DSL.transformation import Sub, SubChar, Del, Ins, InsChar, Swap
+
+word_perturbation = [(Sub(True), 2), (Ins(), 2), (Del(), 2)]
+char_perturbation = [(SubChar(True), 2), (InsChar(True), 2), (Del(), 2), (Swap(), 2)]
 ```
 
-- The following code segment does HotFlip augmentation training on SST2 dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{DelStop}, 2), (T_{Dup}, 2), (T_{SubSyn}, 2)\}$.
+### Train
 
-```python
-SST2_adv_train("word_SST2_adv", target_transformation="Composition(delete, delete, ins, ins, sub, sub)") # adv_train() is the augmentation training method, adv_train_random=False means HotFlip augmentation
-SST2_test_model("word_SST2_adv", target_transformation="Composition(delete, delete, ins, ins, sub, sub)")
-SST2_test_model("word_SST2_adv", func=partial(DelDupSubWord(2,2,2))) # using DelDupSubWord for word-level
-```
-
-We provided the experiment setups of A3T(HotFlip) and A3T(search) in `exp_scripts.txt`. 
-
-Notice in order to use command `test-diffai`, one has to first use the following command:
-
-```bash
-alias test-diffai="python ./diffai/. -d Point --epochs 1 --dont-write --test-freq 1"
-```
-
-And we show some examples of training and evluating the models.
-
-- The following commands do A3T(HotFlip) training on AG dataset and then evaluate on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{InsAdj}, 2), (T_{SubAdj}, 2)\}$.
-
-```bash
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n CharLevelAGSub -D AG --epochs 10 --batch-size 20 --test-first True --test-size=1000 --decay-fir=True --train-delta=2 --adv-train=2 --transform='Composition(ins, ins)' --train-ratio=0.5 --epoch_ratio=0.8 --truncate=30
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --adv-test=True --transform='Composition(ins, ins, sub, sub)' --truncate=30
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D AG --width 0 --test-size=7600 --test-func='DelDupSubChar(0,2,2,d,truncate=30)' --truncate=30
-```
-
-- The following code segment does A3T(search) training on SST2 dataset and then evaluates on HotFlip accuracy and exhaustive accuracy against perturbation $\{(T_{DelStop}, 2), (T_{SubSyn}, 2)\}$.
-
-```bash
-python ./diffai/. -d "Mix(a=Point(),b=Box(),aw=1,bw=0)" -t "Point()" -t "Box()" -n WordLevelSST2 -D SST2 --epochs 20 --batch-size 40 --test-first True --test-size=1821 --decay-fir=True --train-delta=2 --e-train=2 --test-func='DelDupSubWord(2,0,0,d)' -r 0.005
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 --test-size=1821 --adv-test=True --transform='Composition(delete, delete, sub, sub)'
-test-diffai -t Point --test TARGET_PYNET --test-batch-size 1 -D SST2 --width 0 --test-size=1821 --test-func='DelDupSubWord(2,0,2,d)
-```
 
 ## Published Work
 
 Yuhao Zhang, Aws Albarghouthi, Loris D’Antoni, Robustness to Programmable String Transformations via Augmented Abstract Training.
 
+https://arxiv.org/abs/2002.09579

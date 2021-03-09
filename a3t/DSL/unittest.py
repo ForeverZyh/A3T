@@ -2,10 +2,9 @@ import numpy as np
 import unittest
 import random
 import itertools
-import copy
 
-from DSL.general_HotFlip import GeneralHotFlipAttack, Candidate
-from DSL.transformation import Sub, Ins, Del
+from a3t.DSL.general_HotFlip import GeneralHotFlipAttack, Candidate
+from a3t.DSL.transformation import Sub, Ins, Del
 from utils import Beam
 
 
@@ -43,7 +42,9 @@ class TestGeneralHotFlipAttack(unittest.TestCase):
     def test_arguments(self):
         with self.assertRaises(AttributeError):
             GeneralHotFlipAttack([(1, 3, 4)])
-        attack = GeneralHotFlipAttack([(Sub("data/pddb", True), 1), (Del(), 2), (Ins(), 3)])
+        with self.assertRaises(AttributeError):
+            GeneralHotFlipAttack([(1, 2)])
+        attack = GeneralHotFlipAttack([(Sub("dataset", True), 1), (Del(), 2), (Ins(), 3)])
         with self.assertRaises(AttributeError):
             attack.gen_adv(TestModel1(100), [], 1, 5, None)
 
@@ -64,7 +65,7 @@ class TestGeneralHotFlipAttack(unittest.TestCase):
 
     def test_perturbation(self):
         model = TestModel(100)
-        perturb = [(Sub("data/pddb", True), 3), (Del(), 2), (Ins(), 1)]
+        perturb = [(Sub("dataset", True), 3), (Del(), 2), (Ins(), 1)]
         attack = GeneralHotFlipAttack(perturb)
         sen = "i see that a cat sits on the floor .".split()
         sub_pos = perturb[0][0].get_pos(sen)
@@ -90,7 +91,7 @@ class TestGeneralHotFlipAttack(unittest.TestCase):
 
     def test_multi_choice(self):
         model = TestModel(100)
-        perturb = [(Sub("data/pddb", False), 3)]
+        perturb = [(Sub("dataset", False), 3)]
         attack = GeneralHotFlipAttack(perturb)
         sen = "i see that a cat sits on the floor .".split()
         sub_pos = perturb[0][0].get_pos(sen)
@@ -112,7 +113,7 @@ class TestGeneralHotFlipAttack(unittest.TestCase):
 
     def test_single_transformation(self):
         model = TestModel(100)
-        perturb1 = [(Sub("data/pddb", True), 2)]
+        perturb1 = [(Sub("dataset", True), 2)]
         perturb2 = [(Del(), 2)]
         perturb3 = [(Ins(), 2)]
         attack1 = GeneralHotFlipAttack(perturb1)
@@ -170,7 +171,7 @@ class TestGeneralHotFlipAttack(unittest.TestCase):
 
     def test_map_ori2x(self):
         model = TestModel(100)
-        perturb = [(Sub("data/pddb", True), 3), (Del({"floor"}), 2), (Ins(), 1)]
+        perturb = [(Sub("dataset", True), 3), (Del({"floor"}), 2), (Ins(), 1)]
         sen = "i see that a cat sits on the floor .".split()
         sub_pos = perturb[0][0].get_pos(sen)
         del_pos = perturb[1][0].get_pos(sen)

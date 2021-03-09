@@ -1,20 +1,9 @@
-import future
-import builtins
-import past
-import six
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 import torch.autograd
 
-from functools import reduce
 
-try:
-    from . import helpers as h
-except:
-    import helpers as h
+import a3t.diffai.helpers as h
 
 
 def catNonNullErrors(op, ref_errs=None):  # the way of things is ugly
@@ -795,10 +784,10 @@ class ListDomain(object):
         return self.__class__(*args, **kargs)
 
     def isSafe(self, *args, **kargs):
-        raise "Domain Not Suitable For Testing"
+        raise Exception("Domain Not Suitable For Testing")
 
     def labels(self):
-        raise "Domain Not Suitable For Testing"
+        raise Exception("Domain Not Suitable For Testing")
 
     def isPoint(self):
         return all(a.isPoint() for a in self.al)
@@ -947,7 +936,7 @@ class TaggedDomain(object):
         return self.a.isPoint()
 
     def labels(self):
-        raise "Domain Not Suitable For Testing"
+        raise Exception("Domain Not Suitable For Testing")
 
     def __mul__(self, flt):
         return TaggedDomain(self.a.__mul__(flt), self.tag)

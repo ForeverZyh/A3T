@@ -1,25 +1,16 @@
-import future
-import builtins
-import past
-import six
 import inspect
 import os
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 import numpy as np
 import argparse
 import decimal
-import PIL
-from torchvision import datasets, transforms
 from datetime import datetime
-
 from forbiddenfruit import curse
-# from torch.autograd import Variable
-
 from timeit import default_timer as timer
-from dataset.dataset_loader import SSTWordLevel, SSTCharLevel
+
+from a3t.dataset.dataset_loader import SST2WordLevel, SST2CharLevel
+
 
 class Timer:
     def __init__(self, activity=None, units=1, shouldPrint=True, f=None):
@@ -185,91 +176,34 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def loadDataset(dataset, batch_size, train, transform=True, val=False, test_slice=None):
-    oargs = {}
-    if dataset in ["MNIST", "CIFAR10", "CIFAR100", "FashionMNIST", "PhotoTour"]:
-        oargs['train'] = train
-    elif dataset in ["STL10", "SVHN"]:
-        oargs['split'] = 'train' if train else 'test'
-    elif dataset in ["LSUN"]:
-        oargs['classes'] = 'train' if train else 'test'
-    elif dataset in ["Imagenet12"]:
-        pass
-    elif dataset in ["AG", "SST2", "SST2char"]:
-        pass
+def loadDataset(dataset, batch_size, type, test_slice=None):
+    """
+    load the dataset
+    :param dataset: the name of the dataset, currently support SST2CharLevel and SST2WordLevel
+    :param batch_size: the batch size of the dataset loader
+    :param type: "train", "val", "test"
+    :param test_slice: select a slice of the data
+    :return: a dataset loader
+    """
+    assert type in ["train", "val", "test"]
+    if type == "val":
+        X, y = dataset.val_X, dataset.val_y
+    elif type == "train":
+        X, y = dataset.train_X, dataset.train_y
     else:
-        raise Exception(dataset + " is not yet supported")
+        X, y = dataset.test_X, dataset.test_y
 
-    if dataset in ["MNIST"]:
-        transformer = transforms.Compose([transforms.ToTensor()]
-                                         + ([transforms.Normalize((0.1307,), (0.3081,))] if transform else []))
-    elif dataset in ["CIFAR10", "CIFAR100"]:
-        transformer = transforms.Compose(([  # transforms.RandomCrop(32, padding=4),
-                                              transforms.RandomAffine(0, (0.125, 0.125), resample=PIL.Image.BICUBIC),
-                                              transforms.RandomHorizontalFlip(),
-                                              # transforms.RandomRotation(15, resample = PIL.Image.BILINEAR)
-                                          ] if train else [])
-                                         + [transforms.ToTensor()]
-                                         + ([transforms.Normalize((0.4914, 0.4822, 0.4465),
-                                                                  (0.2023, 0.1994, 0.2010))] if transform else []))
-    elif dataset in ["SVHN"]:
-        transformer = transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.2, 0.2, 0.2))])
-    else:
-        transformer = transforms.ToTensor()
+    if test_slice is not None:
+        X = X[test_slice]
+        y = y[test_slice]
 
-    if dataset in ["Imagenet12"]:
-        # https://github.com/facebook/fb.resnet.torch/blob/master/INSTALL.md#download-the-imagenet-dataset
-        train_set = datasets.ImageFolder(
-            '../data/Imagenet12/train' if train else '../data/Imagenet12/val',
-            transforms.Compose([
-                transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
-                normalize,
-            ]))
-    elif dataset in ["AG"]:
-        X = np.load("./dataset/%s/X_%s.npy" % (dataset, 'train' if train else 'test'))
-        y = np.load("./dataset/%s/y_%s.npy" % (dataset, 'train' if train else 'test'))
-        held_out = 4000
-        if val:
-            X = X[:held_out]
-            y = y[:held_out]
-        elif train:
-            X = X[held_out:]
-            y = y[held_out:]
+    x = torch.from_numpy(X)
+    train_set = torch.utils.data.TensorDataset(x, torch.from_numpy(y))
 
-        if test_slice is not None:
-            X = X[test_slice]
-            y = y[test_slice]
-
-        x = torch.from_numpy(X)
-        train_set = torch.utils.data.TensorDataset(x, torch.from_numpy(y))
-    elif dataset in ["SST2", "SST2char"]:
-        if dataset == "SST2":
-            sst = SSTWordLevel
-        else:
-            sst = SSTCharLevel
-        if val:
-            X, y = sst.val_X, sst.val_y
-        elif train:
-            X, y = sst.training_X, sst.training_y
-        else:
-            X, y = sst.test_X, sst.test_y
-            
-        if test_slice is not None:
-            X = X[test_slice]
-            y = y[test_slice]
-            
-        x = torch.from_numpy(X)
-        train_set = torch.utils.data.TensorDataset(x, torch.from_numpy(y))
-    else:
-        train_set = getattr(datasets, dataset)('../data', download=True, transform=transformer, **oargs)
     return torch.utils.data.DataLoader(
         train_set
         , batch_size=batch_size
-        , shuffle=True and train,
+        , shuffle=(type == "train"),
         **({'num_workers': 1, 'pin_memory': True} if use_cuda else {}))
 
 

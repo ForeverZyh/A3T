@@ -1,6 +1,6 @@
 import numpy as np
 
-from DSL.transformation import Transformation
+from a3t.DSL.transformation import Transformation
 from utils import Beam
 
 
@@ -14,7 +14,8 @@ class GeneralHotFlipAttack:
         :Classifier Capacity: Gradient
 
         The idea of writing a perturbation space in a DSL is first proposed and implemented in the following paper:
-        Robustness to Programmable String Transformations via Augmented Abstract Training. Yuhao Zhang, Aws Albarghouthi, Loris D’Antoni.
+        Robustness to Programmable String Transformations via Augmented Abstract Training.
+        Yuhao Zhang, Aws Albarghouthi, Loris D’Antoni.
         `[pdf] <https://arxiv.org/abs/2002.09579>`__
         `[code] <https://github.com/ForeverZyh/A3T>`__
 
@@ -33,8 +34,8 @@ class GeneralHotFlipAttack:
     def gen_adv(self, model, x: list, y, top_n: int, get_embed, return_score=False):
         """
         Beam search for the perturbation space. The order of beam search is the same in the perturbation DSL.
-        Some adversarial attack tries to rearrange the order of beam search for better performance.
-        TODO: the order of beam search can be rearranged for better performance.
+        Some adversarial attack tries to rearrange the order of beam search for better effectiveness.
+        TODO: the order of beam search can be rearranged for better effectiveness.
         :param model: the victim model, which has to support a method get_grad.
         :param x: a list of input tokens.
         :param y: the correct label of input x.
@@ -49,7 +50,7 @@ class GeneralHotFlipAttack:
 
         try:
             model.get_grad
-        except:
+        except AttributeError:
             raise AttributeError("The victim model does not support get_grad method.")
 
         candidate = Candidate(x, 0 if not self.use_random_aug else np.random.random())

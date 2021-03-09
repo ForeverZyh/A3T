@@ -1,33 +1,14 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from torch.distributions import multinomial, categorical
-import torch.optim as optim
-import numpy as np
-
-import math
-import random
-
-try:
-    from . import helpers as h
-    from . import ai
-    from . import scheduling as S
-    from . import goals as g
-except:
-    import helpers as h
-    import ai
-    import scheduling as S
-    import goals as g
-
 import math
 import abc
 from nltk import pos_tag
 
-from torch.nn.modules.conv import _ConvNd
-from enum import Enum
-from utils import swap_pytorch
-from dataset.dataset_loader import SSTWordLevel, Glove
-from DSL.Alphabet import Alphabet
+import a3t.diffai.helpers as h
+import a3t.diffai.ai as ai
+import a3t.diffai.scheduling as S
+from a3t.dataset.dataset_loader import SST2WordLevel, Glove
 
 
 class InferModule(nn.Module):
@@ -49,7 +30,7 @@ class InferModule(nn.Module):
         self.inShape = list(in_shape)
         self.outShape = list(self.init(list(in_shape), *self.args, global_args=global_args, **self.kwargs))
         if self.outShape is None:
-            raise "init should set the out_shape"
+            raise Exception("init should set the out_shape")
 
         self.reset_parameters()
         return self
@@ -97,7 +78,7 @@ class InferModule(nn.Module):
         reg = 0
         if torch.__version__[0] == "0":
             for param in self.parameters():
-                if param.requires_grad: 
+                if param.requires_grad:
                     reg += param.norm(p)
         else:
             if hasattr(self, "weight_g"):
@@ -159,19 +140,25 @@ def getShapeConvTranspose(in_shape, conv_shape, stride=1, padding=0, out_padding
 
 
 class Embedding(InferModule):
-    def init(self, in_shape, span, **kargs):
-        self.vocab, self.dim = Glove.embedding.shape
+    def init(self, in_shape, span, vocab=None, dim=None, glove=None, **kargs):
+        if (vocab is not None and dim is not None) == (glove is not None):
+            raise AssertionError("Either vocab and dim are None or glove is None, can't both be true or false!")
+        if vocab is None or dim is None:
+            self.vocab, self.dim = glove.embedding.shape
+            self.embed = nn.Embedding(self.vocab, self.dim)
+            self.embed.weight.data.copy_(torch.from_numpy(Glove.embedding))
+            self.embed.weight.requires_grad = False
+        else:
+            self.vocab, self.dim = vocab, dim
+            self.embed = nn.Embedding(vocab, dim)
         self.in_shape = in_shape
         self.span = span
-        self.embed = nn.Embedding(self.vocab, self.dim)
-        self.embed.weight.data.copy_(torch.from_numpy(Glove.embedding))
-        self.embed.weight.requires_grad = False
-        
+
         return [1, in_shape[0], self.dim]
 
     def forward(self, x, **kargs):
         if isinstance(x, ai.LabeledDomain):
-            return LabeledDomain(x, **kargs)
+            return ai.LabeledDomain(x, **kargs)
         elif isinstance(x, ai.TaggedDomain):
             return ai.TaggedDomain(self.forward(x.a, **kargs), x.tag)
         elif isinstance(x, ai.ListDomain):
@@ -179,29 +166,22 @@ class Embedding(InferModule):
                 x.al[i] = self.forward(a, **kargs)
             return x
         elif not x.isPoint():  # convert to Box (HybirdZonotope), if the input is Box
-            sample_num = 100
-            swaps = []
-            if "sample_num" in kargs:
-                sample_num = kargs["sample_num"]
-            if "swaps" in kargs:
-                swaps = kargs["swaps"]
-            
+
             x = x.center().vanillaTensorPart().long()
             groups = [[] for _ in range(len(x))]
             for i, data in enumerate(x):
                 input_str = Alphabet.to_string(data, True)
                 input_pos_tag = pos_tag(input_str)
-                
+
                 all_set = 0
                 subs = [[] for _ in range(len(data))]
                 for (j, s) in enumerate(data):
-                    if j not in swaps:
-                        s = int(s)
-                        if s in SSTWordLevel.synonym_dict_id:
-                            for k in range(len(SSTWordLevel.synonym_dict_id[s])):
-                                if SSTWordLevel.synonym_dict_pos_tag[s][k] == input_pos_tag[j][1]:
-                                    subs[j].append(SSTWordLevel.synonym_dict_id[s][k])
-                        all_set += len(subs[j])
+                    s = int(s)
+                    if s in SST2WordLevel.synonym_dict_id:
+                        for k in range(len(SST2WordLevel.synonym_dict_id[s])):
+                            if SST2WordLevel.synonym_dict_pos_tag[s][k] == input_pos_tag[j][1]:
+                                subs[j].append(SST2WordLevel.synonym_dict_id[s][k])
+                    all_set += len(subs[j])
 
                 while all_set > 0:
                     pre = -self.in_shape[0]
@@ -213,12 +193,10 @@ class Embedding(InferModule):
                                 groups[i][-1].append((j, subs[j][0]))
                                 subs[j] = subs[j][1:]
                                 all_set -= 1
-                if sample_num < 100:
-                    random.shuffle(groups[i])
 
             groups_consider = 0
             for t in groups:
-                groups_consider = min(max(groups_consider, len(t)), sample_num)    
+                groups_consider = max(groups_consider, len(t))
             x = x.repeat((1, groups_consider + 1))
             for i in range(len(x)):
                 for j in range(1, min(groups_consider, len(groups[i])) + 1):
@@ -229,7 +207,7 @@ class Embedding(InferModule):
                 item_group_id = id % (groups_consider + 1)
                 item_id = id - item_group_id
                 if item_group_id == 0: continue
-                y[id] = y[id] * EmbeddingWithSub.delta + (1 - EmbeddingWithSub.delta) * y[item_id]
+                y[id] = y[id] * Embedding.delta + (1 - Embedding.delta) * y[item_id]
 
             return ai.TaggedDomain(y, tag="magic" + str(groups_consider + 1))
         elif isinstance(x, torch.Tensor):  # it is a Point
@@ -251,297 +229,6 @@ class Embedding(InferModule):
 
     def printNet(self, f):
         print("Embedding(" + str(self.in_shape[0]) + ", " + str(self.dim) + ")")
-
-        print(h.printNumpy(self.embed.weight), file=f)
-
-
-class EmbeddingWithSub(InferModule):
-    delta = 0
-    truncate = None
-    def init(self, in_shape, vocab, dim, span, **kargs):
-        self.vocab = vocab
-        self.dim = dim
-        self.in_shape = in_shape
-        self.span = span
-        self.embed = nn.Embedding(vocab, dim)
-        subs = [None] * self.in_shape[0]
-        self.swaps = []
-        all_set = self.in_shape[0] * 2 - 2
-        for i in range(len(subs)):
-            if i == 0:
-                subs[i] = [i + 1]
-                self.swaps.append([(i, i + 1)])
-            elif i < len(subs) - 1:
-                subs[i] = [i - 1, i + 1]
-                self.swaps.append([(i, i + 1)])
-            else:
-                subs[i] = [i - 1]
-        self.groups = []
-        while all_set > 0:
-            pre = -self.in_shape[0]
-            self.groups.append([])
-            for i in range(len(subs)):
-                if len(subs[i]) > 0:
-                    if i - pre >= self.span:  # span here is the kernal size + pooling size!
-                        pre = i
-                        self.groups[-1].append((i, subs[i][0]))
-                        subs[i] = subs[i][1:]
-                        all_set -= 1
-        print(len(self.groups))
-
-        return [1, in_shape[0], dim]
-
-    def forward(self, x, **kargs):
-        def LabeledDomain(x, **kwargs):
-            def get_swaped(d):
-                t = np.zeros(d)
-                while len(np.unique(t)) != d:
-                    t = np.random.randint(0, len(self.swaps), d)
-                ys = []
-                for i in range(d):
-                    y1 = y.clone()
-                    for (p, q) in self.swaps[t[i]]:
-                        swap_pytorch(y1, (slice(None), slice(None), p, slice(None)), (slice(None), slice(None), q, slice(None)))    #y1[:, :, p, :], y1[:, :, q, :]
-                    ys.append(y1)
-                return ys
-            def get_swaped_x(d):
-                t = np.zeros(d)
-                while len(np.unique(t)) != d:
-                    t = np.random.randint(0, len(self.swaps), d)
-                xs = [self.forward(ai.TaggedDomain(ai.HybridZonotope(xc, 0, None), g.HBox(0)), sample_num=6)]
-                for i in range(d):
-                    x1 = xc.clone()
-                    for (p, q) in self.swaps[t[i]]:
-                        swap_pytorch(x1, (slice(None), p), (slice(None), q))    #x1[:, p], x1[:, q]
-                    xs.append(self.forward(ai.TaggedDomain(ai.HybridZonotope(x1, 0, None), g.HBox(0)), sample_num=6, swaps=[p, q]))
-                return xs
-
-            xc = x.center()
-            y = self.embed(xc.long()).view(-1, 1, self.in_shape[0], self.dim)
-            # y = kargs["y"]
-            if x.label == "Box":
-                y_ls_1 = y.clone()
-                y_ls_1[:, :, :-1, :] = y[:, :, 1:, :]
-                y_rs_1 = y.clone()
-                y_rs_1[:, :, 1:, :] = y[:, :, :-1, :]
-                lower = torch.min(torch.min(y, y_ls_1), y_rs_1)
-                upper = torch.max(torch.max(y, y_ls_1), y_rs_1)
-                return ai.HybridZonotope((upper + lower) / 2, (upper - lower) / 2, None)
-            elif x.label[-6:] == "Points":
-                d = int(x.label[:-6])
-                if d == 1:
-                    return y
-                ys = get_swaped(d)
-                mid = ys[0]
-                err = None
-                for i in range(1, d):
-                    err = torch.unsqueeze((mid - ys[i]) / 2, 0) if err is None else torch.cat(
-                        [err, torch.unsqueeze((mid - ys[i]) / 2, 0)],
-                        0)
-                    mid = (mid + ys[i]) / 2
-                return ai.TaggedDomain(
-                    ai.HybridZonotope(mid, None, err), g.HBox(0))
-            elif x.label[-len("Zonotope_Dataaug"):] == "Zonotope_Dataaug" or x.label[-len(
-                    "Interval_Dataaug"):] == "Interval_Dataaug":
-                d = int(x.label[:-len("Zonotope_Dataaug")])
-                if x.label[-len("Zonotope_Dataaug"):] == "Zonotope_Dataaug":
-                    tag = "Points"
-                else:
-                    tag = "Points_Interval"
-                ret = []
-                i = 0
-                while i < d:
-                    if d - i in [6, 7]:
-                        t = 3
-                    else:
-                        t = min(5, d - i)
-                    x.label = str(t) + tag
-                    ret.append(ai.TaggedDomain(LabeledDomain(x), g.DList.MLoss(1.0 * t / d)))
-                    # ret.append(LabeledDomain(x))
-                    i += t
-
-                return ai.ListDomain(ret)
-                # return ai.ListDisjDomain(ret)
-            elif x.label[-len("Points_Interval"):] == "Points_Interval":
-                d = int(x.label[:-len("Points_Interval")])
-                ys = get_swaped(d)
-                lower = ys[0].clone()
-                upper = ys[0].clone()
-                for i in range(1, d):
-                    lower = torch.min(lower, ys[i])
-                    upper = torch.max(upper, ys[i])
-                return ai.TaggedDomain(
-                    ai.HybridZonotope((upper + lower) / 2, (upper - lower) / 2, None), g.HBox(0))
-            elif x.label[-len("Points_Dataaug"):] == "Points_Dataaug":
-                d = int(x.label[:-len("Points_Dataaug")])
-                ys = get_swaped(d)
-                return ai.ListDomain([ai.TaggedDomain(y, g.DList.MLoss(1.0 / d)) for y in ys])
-            elif x.label[-len("Convex_Dataaug"):] == "Convex_Dataaug":
-                d = int(x.label[:-len("Convex_Dataaug")])
-                ys = torch.cat(get_swaped(d), 1)
-                return ai.TaggedDomain(ys.view(-1, 1, self.in_shape[0], self.dim), tag="magic" + str(d))
-            elif x.label[-len("Convex_Box_Groups"):] == "Convex_Box_Groups":
-                try:
-                    groups_consider = int(x.label[:-len("Convex_Box_Groups")])
-                except:
-                    groups_consider = None
-                if groups_consider is None:
-                    groups_consider = len(self.groups)
-                else:
-                    random.shuffle(self.groups)
-                x = xc.repeat((1, groups_consider + 1))
-                for i in x:
-                    for j in range(1, groups_consider + 1):
-                        for p, q in self.groups[j - 1]:
-                            i[j * self.in_shape[0] + p] = i[q]
-
-                y = self.embed(x.long()).view(-1, 1, self.in_shape[0], self.dim)
-                for id in range(len(y)):
-                    item_group_id = id % (groups_consider + 1)
-                    item_id = id - item_group_id
-                    if item_group_id == 0: continue
-                    y[id] = y[id] * EmbeddingWithSub.delta + (1 - EmbeddingWithSub.delta) * y[item_id]
-
-                return ai.TaggedDomain(y, tag="magic" + str(groups_consider + 1))
-            elif x.label[-len("Swap_First"):] == "Swap_First":
-                d = int(x.label[:-len("Swap_First")])
-                xs = get_swaped_x(d)
-                return ai.ListDomain([ai.TaggedDomain(x, g.DList.MLoss(1.0 / (d + 1))) for x in xs])
-            elif x.label[-len("SwapSub"):] == "SwapSub":
-                a, b = [int(c) for c in x.label[:-len("SwapSub")].split()]
-                x = xc.vanillaTensorPart().long()
-                groups = [[] for _ in range(len(x))]
-                for i, data in enumerate(x):
-                    subs = [[] for _ in range(len(data))]
-                    swaps = [int(data[j + 1]) != int(data[j]) for j in range(len(data) - 1)]
-                    all_set = 0
-                    for j in range(len(data) - 1):
-                        if swaps[j]: all_set += 1
-                    for (j, s) in enumerate(data):
-                        s = int(s)
-                        subs[j] = self.adjacent_keys[s]
-                        all_set += len(subs[j])
-
-                    while all_set > 0:
-                        pre = -self.in_shape[0]
-                        groups[i].append([])
-                        for j in range(len(subs)):
-                            if j - pre >= self.span:  # span here is the kernal size + pooling size!
-                                if len(subs[j]) > 0:
-                                    pre = j
-                                    groups[i][-1].append((j, subs[j][0]))
-                                    subs[j] = subs[j][1:]
-                                    all_set -= 1
-                                elif j < len(swaps) and swaps[j]:
-                                    pre = j + 1
-                                    groups[i][-1].append((j, int(data[j + 1])))
-                                    groups[i][-1].append((j + 1, int(data[j])))
-                                    all_set -= 1
-                                    swaps[j] = False
-
-                groups_consider = 0
-                for t in groups:
-                    groups_consider = max(groups_consider, len(t))   
-                x = x.repeat((1, groups_consider + 1))
-                for i in range(len(x)):
-                    for j in range(1, min(groups_consider, len(groups[i])) + 1):
-                        for p, q in groups[i][j - 1]:
-                            x[i][j * self.in_shape[0] + p] = q
-                y = self.embed(x.long()).view(-1, 1, self.in_shape[0], self.dim)
-                for id in range(len(y)):
-                    item_group_id = id % (groups_consider + 1)
-                    item_id = id - item_group_id
-                    if item_group_id == 0: continue
-                    y[id] = y[id] * EmbeddingWithSub.delta * (a + b) + (1 - EmbeddingWithSub.delta * (a + b)) * y[item_id]
-
-                return ai.TaggedDomain(y, tag="magic" + str(groups_consider + 1))
-            else:
-                raise NotImplementedError()
-
-        if isinstance(x, ai.LabeledDomain):
-            return LabeledDomain(x, **kargs)
-        elif isinstance(x, ai.TaggedDomain):
-            return ai.TaggedDomain(self.forward(x.a, **kargs), x.tag)
-        elif isinstance(x, ai.ListDomain):
-            for (i, a) in enumerate(x.al):
-                x.al[i] = self.forward(a, **kargs)
-            return x
-        elif not x.isPoint():  # convert to Box (HybirdZonotope), if the input is Box
-            sample_num = 100
-            swaps = []
-            if "sample_num" in kargs:
-                sample_num = kargs["sample_num"]
-            if "swaps" in kargs:
-                swaps = kargs["swaps"]
-            
-            x = x.center().vanillaTensorPart().long()
-            groups = [[] for _ in range(len(x))]
-            for i, data in enumerate(x):
-                all_set = 0
-                subs = [[] for _ in range(len(data))]
-                for (j, s) in enumerate(data):
-                    if EmbeddingWithSub.truncate is not None and EmbeddingWithSub.truncate <= j:
-                        break
-                    if j not in swaps:
-                        s = int(s)
-                        subs[j] = self.adjacent_keys[s]
-                        all_set += len(subs[j])
-
-                while all_set > 0:
-                    pre = -self.in_shape[0]
-                    groups[i].append([])
-                    for j in range(len(subs)):
-                        if len(subs[j]) > 0:
-                            if j - pre >= self.span:  # span here is the kernal size + pooling size!
-                                pre = j
-                                groups[i][-1].append((j, subs[j][0]))
-                                subs[j] = subs[j][1:]
-                                all_set -= 1
-                if sample_num < 100:
-                    random.shuffle(groups[i])
-
-            groups_consider = 0
-            for t in groups:
-                groups_consider = min(max(groups_consider, len(t)), sample_num)         
-            x = x.repeat((1, groups_consider + 1))
-            for i in range(len(x)):
-                for j in range(1, min(groups_consider, len(groups[i])) + 1):
-                    for p, q in groups[i][j - 1]:
-                        x[i][j * self.in_shape[0] + p] = q
-            y = self.embed(x.long()).view(-1, 1, self.in_shape[0], self.dim)
-
-            for id in range(len(y)):
-                item_group_id = id % (groups_consider + 1)
-                item_id = id - item_group_id
-                if item_group_id == 0: continue
-                y[id] = y[id] * EmbeddingWithSub.delta + (1 - EmbeddingWithSub.delta) * y[item_id]
-
-            return ai.TaggedDomain(y, tag="magic" + str(groups_consider + 1))
-        elif isinstance(x, torch.Tensor):  # it is a Point
-            y = self.embed(x.long()).view(-1, 1, self.in_shape[0], self.dim)
-            if S.Info.adv:
-                y.retain_grad()
-                S.Info.out_y = y
-                return S.Info.out_y
-            else:
-                return y
-        elif x.isPoint():  # convert to Point, if the input is Point
-            assert False
-            y = x.center().vanillaTensorPart()
-            y = self.embed(y.long()).view(-1, 1, self.in_shape[0], self.dim)
-            return y
-        else:
-            raise NotImplementedError()
-
-    def neuronCount(self):
-        return 0
-
-    def showNet(self, t=""):
-        print(t + "EmbeddingWithSub out=" + str(self.in_shape[0]) + " * " + str(
-            self.dim))
-
-    def printNet(self, f):
-        print("EmbeddingWithSub(" + str(self.in_shape[0]) + ", " + str(self.dim) + ")")
 
         print(h.printNumpy(self.embed.weight), file=f)
 
@@ -727,8 +414,8 @@ class Conv2D(InferModule):
 
     def neuronCount(self):
         return 0
-    
-    
+
+
 class Conv2D4Embed(InferModule):
 
     def init(self, in_shape, out_channels, kernel_size, stride=1, global_args=None, bias=True, padding=0,
@@ -856,8 +543,8 @@ class AvgPool2D(InferModule):
 
     def neuronCount(self):
         return h.product(self.outShape)
-    
-    
+
+
 class AvgPool2D4Embed(InferModule):
     def init(self, in_shape, kernel_size, stride=None, **kargs):
         self.prev = in_shape
@@ -872,12 +559,14 @@ class AvgPool2D4Embed(InferModule):
         return x.avg_pool2d(kernel_size=(self.kernel_size, 1), stride=self.stride, padding=0)
 
     def printNet(self, f):
-        print("AvgPool2D stride={}, kernel_size={}, input_shape={}".format(list(self.stride), list((self.kernel_size, 1)),
-                                                                           list(self.prev[1:] + self.prev[:1])), file=f)
+        print(
+            "AvgPool2D stride={}, kernel_size={}, input_shape={}".format(list(self.stride), list((self.kernel_size, 1)),
+                                                                         list(self.prev[1:] + self.prev[:1])), file=f)
+
     def showNet(self, t=""):
         sz = list(self.prev)
         print(t + "AvgPool2D stride={}, kernel_size={}, input_shape={}".format(self.stride, list((self.kernel_size, 1)),
-                                                                           list(self.prev[1:] + self.prev[:1])))
+                                                                               list(self.prev[1:] + self.prev[:1])))
 
     def neuronCount(self):
         return h.product(self.outShape)
@@ -1034,8 +723,8 @@ class Seq(InferModule):
 
     def forward(self, x, **kargs):
         return self.net(x, **kargs)
-#         for l in self.layers:
-#             x = l(x, **kargs)
+        #         for l in self.layers:
+        #             x = l(x, **kargs)
         return x
 
     def clip_norm(self):
@@ -1079,11 +768,13 @@ def FFNNDropout(layers, last_lin=False, last_zono=False, **kargs):
     starts = layers
     ends = []
     if last_lin:
-        ends = ([CorrelateAll(only_train=False)] if last_zono else []) + [PrintActivation(activation="Affine"), Dropout(p=0.3),
+        ends = ([CorrelateAll(only_train=False)] if last_zono else []) + [PrintActivation(activation="Affine"),
+                                                                          Dropout(p=0.3),
                                                                           Linear(layers[-1], **kargs)]
         starts = layers[:-1]
 
-    return Seq(*([Seq(PrintActivation(**kargs), Dropout(p=0.3), Linear(s, **kargs), activation(**kargs)) for s in starts] + ends))
+    return Seq(*([Seq(PrintActivation(**kargs), Dropout(p=0.3), Linear(s, **kargs), activation(**kargs)) for s in
+                  starts] + ends))
 
 
 def Conv(*args, **kargs):
@@ -1230,8 +921,8 @@ class ReduceToZono(InferModule):
             num_e = h.product(x.size())
             view_num = all_possible_sub * h.product(self.in_shape)
             x = x.view(-1, all_possible_sub, *self.in_shape)
-            
-            #for i in range(1, all_possible_sub):
+
+            # for i in range(1, all_possible_sub):
             #    x[:, i] = x[:, i] * EmbeddingWithSub.delta + (1 - EmbeddingWithSub.delta) * x[:, 0]
 
             if num_e >= view_num and num_e % view_num == 0:  # convert to Box (HybirdZonotope)
