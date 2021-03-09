@@ -8,7 +8,7 @@ setup(
     author="Yuhao Zhang",
     license="MIT",
     test_suite="tests",
-    install_requires=["forbiddenfruit", "torch==1.5.1", "tensorflow==1.13.1",
+    install_requires=["forbiddenfruit", "torch==1.5.1", "tensorflow==2.4.0",
                       "tensorflow-datasets==1.3.2", "nltk==3.4.5"],
     build_requires=["absl-py<0.11,>=0.9"],
     author_email="yuhaoz@cs.wisc.edu",
