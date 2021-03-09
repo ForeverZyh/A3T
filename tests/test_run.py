@@ -26,6 +26,6 @@ sst2char_loader_test = loadDataset(SST2CharLevel, batch_size, "test")
 
 # transformations
 word_perturbation = [(Sub(True), 2), (Ins(), 2), (Del(), 2)]
-char_perturbation = [(SubChar(True), 2), (InsChar(True), 2), (Del(), 2), (Swap(), 2)]
+char_perturbation = [(SubChar(True), 2), (InsChar(True), 2), (Del(set()), 2), (Swap(), 2)]
 # print(word_perturbation[0][0].synonym_dict)
 # print(char_perturbation[0][0].synonym_dict)

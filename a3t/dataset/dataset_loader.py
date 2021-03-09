@@ -125,27 +125,15 @@ class SST2CharLevel:
 
             return np.array(X), np.array(y)
 
-        X_train_file = join(sst2char_path, "X_train")
-        y_train_file = join(sst2char_path, "y_train")
         ds_train = tfds.load(name="glue/sst2", split="train", shuffle_files=False)
         SST2CharLevel.train_X, SST2CharLevel.train_y = prepare_ds(ds_train)
-        np.save(X_train_file, SST2CharLevel.train_X)
-        np.save(y_train_file, SST2CharLevel.train_y)
         print("Loading training dataset success!")
 
-        X_val_file = join(sst2char_path, "X_val")
-        y_val_file = join(sst2char_path, "y_val")
         ds_val = tfds.load(name="glue/sst2", split="validation", shuffle_files=False)
         SST2CharLevel.val_X, SST2CharLevel.val_y = prepare_ds(ds_val)
-        np.save(X_val_file, SST2CharLevel.val_X)
-        np.save(y_val_file, SST2CharLevel.val_y)
         print("Loading validation dataset success!")
 
-        X_test_file = join(sst2char_path, "X_test")
-        y_test_file = join(sst2char_path, "y_test")
         SST2CharLevel.test_X, SST2CharLevel.test_y = prepare_test_ds(open(a3t_sst2test_file).readlines())
-        np.save(X_test_file, SST2CharLevel.test_X)
-        np.save(y_test_file, SST2CharLevel.test_y)
         print("Loading test dataset success!")
 
         dict_file = join(sst2char_path, "dict_map")
@@ -203,25 +191,13 @@ class SST2WordLevel:
 
             return np.array(X), np.array(y)
 
-        X_train_file = join(sst2word_path, "X_train")
-        y_train_file = join(sst2word_path, "y_train")
         ds_train = tfds.load(name="glue/sst2", split="train", shuffle_files=False)
         SST2WordLevel.train_X, SST2WordLevel.train_y = prepare_ds(ds_train)
-        np.save(X_train_file, SST2WordLevel.train_X)
-        np.save(y_train_file, SST2WordLevel.train_y)
         print("Loading training dataset success!")
 
-        X_val_file = join(sst2word_path, "X_val")
-        y_val_file = join(sst2word_path, "y_val")
         ds_val = tfds.load(name="glue/sst2", split="validation", shuffle_files=False)
         SST2WordLevel.val_X, SST2WordLevel.val_y = prepare_ds(ds_val)
-        np.save(X_val_file, SST2WordLevel.val_X)
-        np.save(y_val_file, SST2WordLevel.val_y)
         print("Loading validation dataset success!")
 
-        X_test_file = join(sst2word_path, "X_test")
-        y_test_file = join(sst2word_path, "y_test")
         SST2WordLevel.test_X, SST2WordLevel.test_y = prepare_test_ds(open(a3t_sst2test_file).readlines())
-        np.save(X_test_file, SST2WordLevel.test_X)
-        np.save(y_test_file, SST2WordLevel.test_y)
         print("Loading test dataset success!")
