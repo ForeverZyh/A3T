@@ -1,7 +1,7 @@
 import numpy as np
 
 from a3t.DSL.transformation import Transformation
-from utils import Beam
+from a3t.utils import Beam
 
 
 class GeneralHotFlipAttack:

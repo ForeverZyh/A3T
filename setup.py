@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 setup(
     name='a3t',
     packages=find_packages(),
-    version='0.0.0',
+    version='0.0.1',
     description='Implementation for A3T',
     author="Yuhao Zhang",
     license="MIT",

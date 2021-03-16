@@ -5,7 +5,7 @@ import itertools
 
 from a3t.DSL.general_HotFlip import GeneralHotFlipAttack, Candidate
 from a3t.DSL.transformation import Sub, Ins, Del
-from utils import Beam
+from a3t.utils import Beam
 
 
 class TestModel1:
