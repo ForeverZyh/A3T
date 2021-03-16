@@ -9,8 +9,6 @@ from datetime import datetime
 from forbiddenfruit import curse
 from timeit import default_timer as timer
 
-from a3t.dataset.dataset_loader import SST2WordLevel, SST2CharLevel
-
 
 class Timer:
     def __init__(self, activity=None, units=1, shouldPrint=True, f=None):

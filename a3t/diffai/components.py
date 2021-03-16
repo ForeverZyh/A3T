@@ -3,12 +3,10 @@ import torch.nn.functional as F
 import torch.nn as nn
 import math
 import abc
-from nltk import pos_tag
 
 import a3t.diffai.helpers as h
 import a3t.diffai.ai as ai
 import a3t.diffai.scheduling as S
-from a3t.dataset.dataset_loader import SST2WordLevel, Glove
 
 
 class InferModule(nn.Module):
@@ -146,7 +144,7 @@ class Embedding(InferModule):
         if vocab is None or dim is None:
             self.vocab, self.dim = glove.embedding.shape
             self.embed = nn.Embedding(self.vocab, self.dim)
-            self.embed.weight.data.copy_(torch.from_numpy(Glove.embedding))
+            self.embed.weight.data.copy_(torch.from_numpy(glove.embedding))
             self.embed.weight.requires_grad = False
         else:
             self.vocab, self.dim = vocab, dim
@@ -168,54 +166,79 @@ class Embedding(InferModule):
         elif not x.isPoint():  # convert to Box (HybirdZonotope), if the input is Box
 
             x = x.center().vanillaTensorPart().long()
+            if S.TrainInfo.cur_ratio == 0:
+                return self.forward(x, **kargs)
             groups = [[] for _ in range(len(x))]
             for i, data in enumerate(x):
-                input_str = Alphabet.to_string(data, True)
-                input_pos_tag = pos_tag(input_str)
+                input_str = S.TrainInfo.victim_model.to_strs(data)
+                sub_num = 0
+                sub_poses = [{} for _ in range(len(input_str))]
+                # sub_poses[i][j] means the substitutions at positions from i to j (excluded)
+                for (tran, delta) in S.TrainInfo.abs_perturb:
+                    poses = tran.get_pos(input_str)
+                    for (start, end) in poses:
+                        for substring_transformed in tran.sub_transformer(input_str, start, end):
+                            assert end - start == len(substring_transformed)  # sanity check
+                            if end not in sub_poses[start]:
+                                sub_poses[start][end] = []
+                            sub_num += 1
+                            sub_poses[start][end].append(
+                                [S.TrainInfo.victim_model.vocab.get_index(c) for c in substring_transformed])
 
-                all_set = 0
-                subs = [[] for _ in range(len(data))]
-                for (j, s) in enumerate(data):
-                    s = int(s)
-                    if s in SST2WordLevel.synonym_dict_id:
-                        for k in range(len(SST2WordLevel.synonym_dict_id[s])):
-                            if SST2WordLevel.synonym_dict_pos_tag[s][k] == input_pos_tag[j][1]:
-                                subs[j].append(SST2WordLevel.synonym_dict_id[s][k])
-                    all_set += len(subs[j])
-
-                while all_set > 0:
-                    pre = -self.in_shape[0]
+                while sub_num > 0:
+                    pre = -self.span
                     groups[i].append([])
-                    for j in range(len(subs)):
-                        if len(subs[j]) > 0:
-                            if j - pre >= self.span:  # span here is the kernal size + pooling size!
-                                pre = j
-                                groups[i][-1].append((j, subs[j][0]))
-                                subs[j] = subs[j][1:]
-                                all_set -= 1
+                    for start in range(len(sub_poses)):
+                        if start - pre >= self.span and len(sub_poses[start]) > 0:
+                            should_del = None
+                            for end in sub_poses[start]:
+                                assert len(sub_poses[start][end]) > 0
+                                pre = end - 1
+                                for j in range(start, end):
+                                    groups[i][-1].append((j, sub_poses[start][end][0][j - start]))
+                                sub_poses[start][end] = sub_poses[start][end][1:]  # remove the first one
+                                if len(sub_poses[start][end]) == 0:
+                                    should_del = end  # remove end pos from sub_poses[start]
+                                sub_num -= 1
+                                break
+
+                            if should_del is not None:
+                                del sub_poses[start][should_del]
 
             groups_consider = 0
             for t in groups:
                 groups_consider = max(groups_consider, len(t))
             x = x.repeat((1, groups_consider + 1))
+            # the x repeats as (batch_size, len_x * (groups_consider + 1))
+            # every x[i][0] is the original input, and x[i][j] (j > 0) is the modified input
+            # the following loop modifies each x[i][j]
             for i in range(len(x)):
                 for j in range(1, min(groups_consider, len(groups[i])) + 1):
                     for p, q in groups[i][j - 1]:
                         x[i][j * self.in_shape[0] + p] = q
+
             y = self.embed(x.long()).view(-1, 1, self.in_shape[0], self.dim)
+
+            # constrains the delta by total_delta * S.TrainInfo.cur_ratio
+            total_delta = 0
+            for (_, delta) in S.TrainInfo.abs_perturb:
+                total_delta += delta
+            cur_delta = total_delta * S.TrainInfo.cur_ratio
             for id in range(len(y)):
-                item_group_id = id % (groups_consider + 1)
-                item_id = id - item_group_id
-                if item_group_id == 0: continue
-                y[id] = y[id] * Embedding.delta + (1 - Embedding.delta) * y[item_id]
+                ori_id = id - id % (groups_consider + 1)
+                if ori_id == id: continue
+                y[id] = y[id] * cur_delta + (1 - cur_delta) * y[ori_id]
 
             return ai.TaggedDomain(y, tag="magic" + str(groups_consider + 1))
         elif isinstance(x, torch.Tensor):  # it is a Point
             y = self.embed(x.long()).view(-1, 1, self.in_shape[0], self.dim)
-            if S.Info.adv:
-                y.requires_grad = True
-                S.Info.out_y = y
-                return S.Info.out_y
+            if S.TrainInfo.adv:
+                if not y.requires_grad:
+                    y.requires_grad = True
+                else:
+                    y.retain_grad()
+                S.TrainInfo.out_y = y
+                return S.TrainInfo.out_y
             else:
                 return y
         else:

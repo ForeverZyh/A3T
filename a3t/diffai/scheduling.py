@@ -1,9 +1,7 @@
 import torch
-from torch import nn
 import math
 
 import a3t.diffai.helpers as h
-import a3t.diffai.ai as ai
 
 
 class Const():
@@ -129,94 +127,10 @@ class Complement(Const):  # use with mix when aw = 1, and 0 <= c < 1
         return "Complement(%s)" % str(self.c)
 
 
-class DataParallelAI(nn.DataParallel):
-    def __init__(self, module, device_ids=None, output_device=None, dim=0):
-        super(DataParallelAI, self).__init__(module, device_ids, output_device, dim)
-
-    def scatter(self, inputs, kwargs, device_ids):
-        def inner_scatter(inputs, target_gpus, dim=0):
-            if isinstance(inputs, tuple) and len(inputs) == 1:
-                inputs = inputs[0]
-            if isinstance(inputs, ai.ListDomain):
-                rets = [type(inputs)([]) for _ in range(len(device_ids))]
-                for (i, a) in enumerate(inputs.al):
-                    tmp_rets = inner_scatter(a, target_gpus, dim)
-                    assert len(tmp_rets) == len(rets)
-                    for ret, tmp_ret in zip(rets, tmp_rets):
-                        ret.al.append(tmp_ret)
-                return rets
-            elif isinstance(inputs, ai.TaggedDomain):
-                tmp_rets = inner_scatter(inputs.a, target_gpus, dim)
-                rets = []
-                for tmp_ret in tmp_rets:
-                    rets.append(type(inputs)(tmp_ret, inputs.tag))
-                return rets
-            elif isinstance(inputs, ai.LabeledDomain):
-                tmp_rets = inner_scatter(inputs.o, target_gpus, dim)
-                rets = []
-                for tmp_ret in tmp_rets:
-                    rets.append(type(inputs)(inputs.label))
-                    rets[-1].box(tmp_ret)
-                return rets
-            elif isinstance(inputs, ai.HybridZonotope):
-                head = inner_scatter(inputs.head, target_gpus, dim)
-                errors = None if inputs.errors is None else inner_scatter(inputs.errors, target_gpus, 1)
-                beta = None if inputs.beta is None else inner_scatter(inputs.beta, target_gpus, dim)
-                rets = []
-                for i in range(len(head)):
-                    rets.append(type(inputs)(head[i], beta[i] if beta is not None else None,
-                                             errors[i] if errors is not None else None))
-                return rets
-            else:
-                return nn.parallel.scatter_gather.scatter(inputs, target_gpus, dim)
-
-        def scatter_kwargs(inputs, kwargs, target_gpus, dim=0):
-            r"""Scatter with support for kwargs dictionary"""
-            inputs = inner_scatter(inputs, target_gpus, dim) if inputs else []
-            kwargs = inner_scatter(kwargs, target_gpus, dim) if kwargs else []
-            if len(inputs) < len(kwargs):
-                inputs.extend([() for _ in range(len(kwargs) - len(inputs))])
-            elif len(kwargs) < len(inputs):
-                kwargs.extend([{} for _ in range(len(inputs) - len(kwargs))])
-            inputs = tuple(inputs)
-            kwargs = tuple(kwargs)
-            return inputs, kwargs
-
-        return scatter_kwargs(inputs, kwargs, device_ids, dim=self.dim)
-
-    def gather(self, outputs, target_device, dim=0):
-        def inner_gather(outputs, target_gpus, dim=0):
-            if isinstance(outputs[0], ai.ListDomain):
-                ret = type(outputs[0])([])
-                for i in range(len(outputs[0].al)):
-                    t = [o.al[i] for o in outputs]
-                    tmp_rets = inner_gather(t, target_gpus, dim)
-                    ret.al.append(tmp_rets)
-
-                return ret
-            elif isinstance(outputs[0], ai.TaggedDomain):
-                t = [o.a for o in outputs]
-                tmp_rets = inner_gather(t, target_gpus, dim)
-                return type(outputs[0])(tmp_rets, outputs[0].tag)
-            elif isinstance(outputs[0], ai.LabeledDomain):
-                t = [ot.o for ot in outputs]
-                tmp_rets = inner_gather(t, target_gpus, dim)
-                ret = type(outputs[0])(outputs[0].label)
-                ret.box(tmp_rets)
-                return ret
-            elif isinstance(outputs[0], ai.HybridZonotope):
-                head = inner_gather([o.head for o in outputs], target_gpus, dim)
-                errors = None if outputs[0].errors is None else inner_gather([o.errors for o in outputs], target_gpus,
-                                                                             1)
-                beta = None if outputs[0].beta is None else inner_gather([o.beta for o in outputs], target_gpus, dim)
-                return type(outputs[0])(head, beta, errors)
-            else:
-                return nn.parallel.scatter_gather.gather(outputs, target_gpus, dim)
-
-        return inner_gather(outputs, target_device, dim)
-
-
-class Info:
+class TrainInfo:
     out_y = None
     adv = False
-    adjacent_keys = None
+    cur_ratio = 0
+    total_batches_seen = 0
+    abs_perturb = []
+    victim_model = None

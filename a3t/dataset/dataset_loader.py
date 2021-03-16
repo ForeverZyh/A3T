@@ -11,20 +11,31 @@ if not exists(DATASET_HOME):
     mkdir(DATASET_HOME)
 
 
+class Vocab:
+    def __init__(self, g):
+        self.str2id = g.str2id
+        self.id2str = g.id2str
+
+    def get_index(self, x):
+        if x in self.str2id:
+            return self.str2id[x]
+        return self.str2id["_UNK_"]
+
+    def get_word(self, x):
+        return self.id2str[x]
+
+
 class Glove:
     str2id = {"_UNK_": 0}
     id2str = ["_UNK_"]
     embedding = []
-
-    @staticmethod
-    def get_word_id(s):
-        if s in Glove.str2id:
-            return Glove.str2id[s]
-        # return the _UNK_
-        return 0
+    is_built = False
 
     @staticmethod
     def build(all_vocab, dim, dataset_home=DATASET_HOME):
+        if Glove.is_built:  # make sure it will only be built once
+            return
+        Glove.is_built = True
         glove_path = join(dataset_home, "glove")
         if not exists(glove_path):
             mkdir(glove_path)
@@ -66,6 +77,11 @@ class Glove:
         np.save(cached_glove_dict_file, Glove.str2id)
         print("Loading glove embedding success!")
 
+    @staticmethod
+    def make_vocab():
+        assert Glove.is_built
+        return Vocab(Glove)
+
 
 class SST2CharLevel:
     train_X = []
@@ -76,14 +92,16 @@ class SST2CharLevel:
     val_y = []
     max_len = 268
     is_built = False
-    dict_map = {" ": 0}
+    str2id = {"_UNK_": 0}
+    id2str = ["_UNK_"]
 
     @staticmethod
     def map(c):
-        if c not in SST2CharLevel.dict_map:
-            SST2CharLevel.dict_map[c] = len(SST2CharLevel.dict_map)
+        if c not in SST2CharLevel.str2id:
+            SST2CharLevel.str2id[c] = len(SST2CharLevel.str2id)
+            SST2CharLevel.id2str.append(c)
 
-        return SST2CharLevel.dict_map[c]
+        return SST2CharLevel.str2id[c]
 
     @staticmethod
     def build(dataset_home=DATASET_HOME):
@@ -136,8 +154,10 @@ class SST2CharLevel:
         SST2CharLevel.test_X, SST2CharLevel.test_y = prepare_test_ds(open(a3t_sst2test_file).readlines())
         print("Loading test dataset success!")
 
-        dict_file = join(sst2char_path, "dict_map")
-        np.save(dict_file, SST2CharLevel.dict_map)
+    @staticmethod
+    def make_vocab():
+        assert SST2CharLevel.is_built
+        return Vocab(SST2CharLevel)
 
 
 class SST2WordLevel:
@@ -149,12 +169,14 @@ class SST2WordLevel:
     val_y = []
     max_len = 56
     is_built = False
+    vocab = None
 
     @staticmethod
     def build(dataset_home=DATASET_HOME):
         if SST2WordLevel.is_built:  # make sure it will only be built once
             return
         SST2WordLevel.is_built = True
+        SST2WordLevel.vocab = Glove.make_vocab()
 
         sst2word_path = join(dataset_home, "sst2word")
         if not exists(sst2word_path):
@@ -170,7 +192,7 @@ class SST2WordLevel:
                 tokens = word_tokenize(sentence.decode('UTF-8'))
                 x = np.zeros(SST2WordLevel.max_len, dtype=np.int)
                 for (i, token) in enumerate(tokens):
-                    x[i] = Glove.get_word_id(token)
+                    x[i] = SST2WordLevel.vocab.get_index(token)
                 X.append(x)
                 y.append(label)
 
@@ -185,7 +207,7 @@ class SST2WordLevel:
                 tokens = word_tokenize(sentence)
                 x = np.zeros(SST2WordLevel.max_len, dtype=np.int)
                 for (i, token) in enumerate(tokens):
-                    x[i] = Glove.get_word_id(token)
+                    x[i] = SST2WordLevel.vocab.get_index(token)
                 X.append(x)
                 y.append(int(label))
 

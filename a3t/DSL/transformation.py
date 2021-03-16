@@ -24,6 +24,10 @@ class Transformation(ABC):
         # transformer for a segment of input
         pass
 
+    def sub_transformer(self, ipt, start_pos, end_pos):
+        # substring transformer for length preserving transformation
+        assert self.length_preserving
+
 
 class Sub(Transformation):
     def __init__(self, use_fewer_sub, dataset_home="/tmp/.A3T", ppdb_type="s"):
@@ -48,7 +52,7 @@ class Sub(Transformation):
         with gzip.open(pddb_file, 'rb') as f:
             lines = f.readlines()
             for line in lines:
-                line = str(line)
+                line = line.decode()
                 tmp = line.strip().split(" ||| ")
                 postag, x, y = tmp[0][1:-1], tmp[1], tmp[2]
                 self.synonym_dict_add_str(x, y, postag)
@@ -83,6 +87,14 @@ class Sub(Transformation):
             if t == pos_tagging:
                 new_ipt = ipt[:start_pos] + [w] + ipt[end_pos:]
                 yield new_ipt
+
+    def sub_transformer(self, ipt, start_pos, end_pos):
+        ipt_pos_tag = pos_tag(ipt)
+        x = ipt[start_pos]
+        pos_tagging = ipt_pos_tag[start_pos][1]
+        for (w, t) in zip(self.synonym_dict[x], self.synonym_dict_pos_tag[x]):
+            if t == pos_tagging:
+                yield [w]
 
 
 class SubChar(Transformation):
@@ -121,6 +133,11 @@ class SubChar(Transformation):
         for w in self.synonym_dict[x]:
             new_ipt = ipt[:start_pos] + [w] + ipt[end_pos:]
             yield new_ipt
+
+    def sub_transformer(self, ipt, start_pos, end_pos):
+        x = ipt[start_pos]
+        for w in self.synonym_dict[x]:
+            yield [w]
 
 
 class Del(Transformation):
@@ -217,3 +234,6 @@ class Swap(Transformation):
     def transformer(self, ipt, start_pos, end_pos):
         new_ipt = ipt[:start_pos] + [ipt[start_pos + 1], ipt[start_pos]] + ipt[end_pos:]
         yield new_ipt
+
+    def sub_transformer(self, ipt, start_pos, end_pos):
+        yield [ipt[start_pos + 1], ipt[start_pos]]
