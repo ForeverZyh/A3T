@@ -1,4 +1,5 @@
 forbiddenfruit
 torch==1.5.1
+tensorflow
 tensorflow-datasets
 nltk==3.4.5

@@ -1,101 +1,7 @@
 import numpy as np
-import keras
-import keras.backend as K
 import heapq
-import copy
-from multiprocessing import Pool, Process, SimpleQueue, Pipe
 
 inf = 1e10
-
-
-class Multiprocessing:
-    @staticmethod
-    def work(fun, child_conn, args):
-        ret = fun(args[0], child_conn, args[2])
-        child_conn.send(("close", ret))
-
-    @staticmethod
-    def mapping(fun, args_list, processes, partial_to_loss):
-        ans = [None] * len(args_list)
-        pipes = []
-        for batch_start in range(0, len(args_list), processes):
-            ps = []
-            for i in range(batch_start, min(batch_start + processes, len(args_list))):
-                parent_conn, child_conn = Pipe()
-                pipes.append(parent_conn)
-                p = Process(target=Multiprocessing.work, args=(fun, child_conn, args_list[i]))
-                p.start()
-                ps.append(p)
-
-            unfinished = len(ps)
-            while unfinished > 0:
-                for i in range(batch_start, min(batch_start + processes, len(args_list))):
-                    if pipes[i] is not None:
-                        s = pipes[i].recv()
-                        if len(s) == 2 and s[0] == "close":
-                            ans[i] = s[1]
-                            pipes[i] = None
-                            unfinished -= 1
-                        else:
-                            pipes[i].send(partial_to_loss(s, args_list[i][1]))
-
-            for p in ps:
-                p.join()
-
-        return ans
-
-
-class MultiprocessingWithoutPipe:
-    @staticmethod
-    def work(fun, num, q, args):
-        np.random.seed(num)
-        ret = fun(*args)
-        q.put((num, ret))
-
-    @staticmethod
-    def mapping(fun, args_list, processes):
-        ans = [None] * len(args_list)
-        q = SimpleQueue()
-        for batch_start in range(0, len(args_list), processes):
-            ps = []
-            for i in range(batch_start, min(batch_start + processes, len(args_list))):
-                p = Process(target=MultiprocessingWithoutPipe.work, args=(fun, i, q, args_list[i]))
-                p.start()
-                ps.append(p)
-
-            while not q.empty():
-                num, ret = q.get()
-                ans[num] = ret
-
-            for p in ps:
-                p.join()
-
-        while not q.empty():
-            num, ret = q.get()
-            ans[num] = ret
-
-        return ans
-
-
-class Gradient(keras.layers.Layer):
-    def __init__(self, y, **kwargs):
-        super(Gradient, self).__init__(**kwargs)
-        self.y = y
-
-    def build(self, input_shape):
-        # Create a trainable weight variable for this layer.
-        super(Gradient, self).build(input_shape)  # Be sure to call this at the end
-
-    def call(self, x, **kwargs):
-        return K.gradients(self.y, x)[0]
-
-    def compute_mask(self, inputs, mask=None):
-        if mask is None:
-            return None
-        return mask
-
-    def compute_output_shape(self, input_shape):
-        return input_shape
 
 
 def tuple_set_union(ret0: tuple, ret1: tuple):
@@ -213,34 +119,7 @@ class UnorderedBeam:
         return ret
 
 
-class Dict:
-    def __init__(self, char2id):
-        self.char2id = char2id
-        self.id2char = [" "] * len(char2id)
-        for c in char2id:
-            self.id2char[char2id[c]] = c
-
-    def to_string(self, ids):
-        return "".join([self.id2char[x] for x in ids])
-
-    def to_ids(self, s):
-        return np.array([self.char2id[c] for c in s])
-
-
 def swap_pytorch(x, p1, p2):
     z = x[p1].clone()
     x[p1] = x[p2]
     x[p2] = z
-
-
-def compute_adjacent_keys(dict_map):
-    lines = open("./dataset/en.key").readlines()
-    adjacent_keys = [[] for i in range(len(dict_map))]
-    for line in lines:
-        tmp = line.strip().split()
-        ret = set(tmp[1:]).intersection(dict_map.keys())
-        ids = []
-        for x in ret:
-            ids.append(dict_map[x])
-        adjacent_keys[dict_map[tmp[0]]].extend(ids)
-    return adjacent_keys

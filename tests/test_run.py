@@ -60,11 +60,11 @@ train(SST2CharLevel.make_vocab(), sst2char_loader_train, sst2char_loader_val, ss
       [(InsChar(True), 2), (Del(set()), 2)], [(SubChar(True), 2), (Swap(), 2)], fixed_len=SST2CharLevel.max_len,
       args=Args)
 
-# Test
-train(SST2CharLevel.make_vocab(), sst2char_loader_train, sst2char_loader_val, sst2char_loader_test,
-      [(InsChar(True), 2), (Del(set()), 2)], [(SubChar(True), 2), (Swap(), 2)], fixed_len=SST2CharLevel.max_len,
-      args=Args, test=True,
-      load_path="out/XXX.pynet")
+# # Test
+# train(SST2CharLevel.make_vocab(), sst2char_loader_train, sst2char_loader_val, sst2char_loader_test,
+#       [(InsChar(True), 2), (Del(set()), 2)], [(SubChar(True), 2), (Swap(), 2)], fixed_len=SST2CharLevel.max_len,
+#       args=Args, test=True,
+#       load_path="out/XXX.pynet")
 
 
 Args.model_srt = "WordLevelSST2"
@@ -72,8 +72,8 @@ Args.model_srt = "WordLevelSST2"
 train(SST2WordLevel.vocab, sst2word_loader_train, sst2word_loader_val, sst2word_loader_test,
       [(Ins(), 2), (Del(), 2)], [(Sub(True), 2)], fixed_len=SST2WordLevel.max_len, args=Args)
 
-# Test
-train(SST2WordLevel.vocab, sst2word_loader_train, sst2word_loader_val, sst2word_loader_test,
-      [(Ins(), 2), (Del(), 2)], [(Sub(True), 2)], fixed_len=SST2WordLevel.max_len, args=Args,
-      test=True,
-      load_path="out/YYY.pynet")
+# # Test
+# train(SST2WordLevel.vocab, sst2word_loader_train, sst2word_loader_val, sst2word_loader_test,
+#       [(Ins(), 2), (Del(), 2)], [(Sub(True), 2)], fixed_len=SST2WordLevel.max_len, args=Args,
+#       test=True,
+#       load_path="out/YYY.pynet")
