@@ -30,6 +30,20 @@ def adv_batch(model, attack, batch_X, batch_Y, adv_num):
 
 def train(vocab, train_loader, val_loader, test_loader, adv_perturb, abs_perturb, args, fixed_len=None, num_classes=2
           , load_path=None, test=False):
+    """
+    training pipeline for A3T
+    :param vocab: the vocabulary of the model, see dataset.dataset_loader.Vocab for details
+    :param train_loader: the dataset loader for train set, obtained from a3t.diffai.helpers.loadDataset
+    :param val_loader: the dataset loader for validation set
+    :param test_loader: the dataset loader for test set
+    :param adv_perturb: the perturbation space for HotFlip training
+    :param abs_perturb: the perturbation space for abstract training
+    :param args: the arguments for training
+    :param fixed_len: CNN models need to pad the input to a certain length
+    :param num_classes: the number of classification classes
+    :param load_path: if specified, point to the file of loading net
+    :param test: True if test, train otherwise
+    """
     n = args.model_srt
     assert n in ["WordLevelSST2", "CharLevelSST2"]
     if test:

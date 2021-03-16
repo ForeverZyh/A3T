@@ -16,7 +16,7 @@ def prepare_SST2CharLevel():
 class Args:
     batch_size = 10
     model_srt = ""
-    clip_norm = True
+    clip_norm = False
     epochs = 20
     log_freq = 10
     save_freq = 1

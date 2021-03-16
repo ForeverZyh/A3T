@@ -41,21 +41,14 @@ cd A3T
 python setup.py install
 ```
 
-### Troubleshooting
-Sometimes you may need to downgrade `numpy` to 1.16.1 and/or `Pillow` to 6.1.0 by
-
-```bash
-pip uninstall numpy && pip install numpy==1.16.1
-pip uninstall Pillow && pip install Pillow==6.1.0
-```
-
-
 ## Get Started
 
 We provide the training process of a word-level model and a char-level model on the SST2 dataset. 
 Please see the `tests/test_run.py` for details.
 
 ### Prepare the Dataset and the Model
+
+#### Dataset
 
 The default save directory is `/tmp/.A3T`, but one can also specify their own path (see `Glove.build()` in `a3t/dataset/dataset_loader.py`).
 
@@ -90,6 +83,12 @@ def loadDataset(dataset, batch_size, type, test_slice=None):
     """
 ```
 
+#### Model
+
+A3T targets at CNN models. `WordLevelSST2` and `CharLevelSST2` in `diffai.models` define two CNN models that were used in the experiments of this paper.
+Remark that some literature point out that adding a linear layer between embedding layer and the first layer yields better results. 
+This phenomenon also appears in CNN models. Thus, for better results, we recommend adding a linear layer by calling `diffai.componenets.Linear(out_dim)`.
+
 ### Customize the String Transformations
 
 In general, A3T supports customized string transformations provided by the users.
@@ -99,6 +98,33 @@ The `DSL.transformation` contains several string transformations already defined
 One can define their own string transformations by implementing the abstract class `Transformation` and two functions `get_pos` and `transformer` as described in our paper. 
 `get_pos` accepts a list of input tokens and returns a list of position pairs (start, end).
 `transformer` accepts a list of input tokens and a start-end position pair and returns an iterator which enumerates the possible transformations at the start-end position.
+
+```python
+from abc import ABC, abstractmethod
+
+class Transformation(ABC):
+    def __init__(self, length_preserving=False):
+        """
+        A default init function.
+        """
+        super().__init__()
+        self.length_preserving = length_preserving
+
+    @abstractmethod
+    def get_pos(self, ipt):
+        # get matched positions in input
+        pass
+
+    @abstractmethod
+    def transformer(self, ipt, start_pos, end_pos):
+        # transformer for a segment of input
+        pass
+
+    def sub_transformer(self, ipt, start_pos, end_pos):
+        # substring transformer for length preserving transformation
+        assert self.length_preserving
+```
+Notice that we need to implement `sub_transformer` if the transformation is a length-preserving transformation. 
 
 #### Define a perturbation space
 
@@ -114,6 +140,29 @@ char_perturbation = [(SubChar(True), 2), (InsChar(True), 2), (Del(), 2), (Swap()
 
 ### Train
 
+The main training pipeline is in `diffai.train.train`
+
+```python
+def train(vocab, train_loader, val_loader, test_loader, adv_perturb, abs_perturb, args, fixed_len=None, num_classes=2
+          , load_path=None, test=False):
+    """
+    training pipeline for A3T
+    :param vocab: the vocabulary of the model, see dataset.dataset_loader.Vocab for details
+    :param train_loader: the dataset loader for train set, obtained from a3t.diffai.helpers.loadDataset
+    :param val_loader: the dataset loader for validation set
+    :param test_loader: the dataset loader for test set
+    :param adv_perturb: the perturbation space for HotFlip training
+    :param abs_perturb: the perturbation space for abstract training
+    :param args: the arguments for training
+    :param fixed_len: CNN models need to pad the input to a certain length
+    :param num_classes: the number of classification classes
+    :param load_path: if specified, point to the file of loading net
+    :param test: True if test, train otherwise
+    """
+```
+The `args` argument contains various training hyper-parameters, see `tests/test_run.Args` for a default version of hyper-parameter settings.
+
+In all, `tests/test_run` contains a complete process of training a `SST2WordLevel` model and a `SST2CharLevel` model on a fragment of dataset.
 
 ## Published Work
 
